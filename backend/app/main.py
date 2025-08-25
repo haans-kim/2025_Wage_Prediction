@@ -1,3 +1,12 @@
+import os
+import random
+import numpy as np
+
+# 재현성을 위한 환경 변수 및 시드 설정
+os.environ['PYTHONHASHSEED'] = '42'
+random.seed(42)
+np.random.seed(42)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse

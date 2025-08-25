@@ -14,25 +14,42 @@ class DataService:
         self.upload_dir.mkdir(exist_ok=True)
         self.data_dir = Path("data")
         self.data_dir.mkdir(exist_ok=True)
-        self.pickle_file = self.data_dir / "current_data.pkl"
+        self.pickle_file = self.data_dir / "master_data.pkl"
+        # 스케일된 데이터 > 정제된 데이터 > 원본 데이터 순으로 사용
+        scaled_file = "wage_increase_scaled.xlsx"
+        cleaned_file = "wage_increase_cleaned.xlsx"
+        if os.path.exists(scaled_file):
+            self.master_excel_file = scaled_file
+        elif os.path.exists(cleaned_file):
+            self.master_excel_file = cleaned_file
+        else:
+            self.master_excel_file = "wage_increase.xlsx"
         self.current_data: Optional[pd.DataFrame] = None
         self.data_info: Optional[Dict[str, Any]] = None
         
-        # 시작시 기본 데이터 로드 시도
-        self._load_default_data()
+        # 시작시 마스터 데이터 로드 시도
+        self._load_master_data()
     
-    def _load_default_data(self) -> bool:
-        """기본 데이터 로드 (pickle 파일에서)"""
+    def _load_master_data(self) -> bool:
+        """마스터 데이터 로드 (pickle 파일 우선, 없으면 Excel에서)"""
         try:
+            # 1. 먼저 pickle 파일에서 로드 시도
             if self.pickle_file.exists():
                 with open(self.pickle_file, 'rb') as f:
                     data_package = pickle.load(f)
                     self.current_data = data_package['data']
                     self.data_info = data_package['info']
-                    logging.info(f"Loaded default data from pickle: {self.current_data.shape}")
+                    logging.info(f"Loaded master data from pickle: {self.current_data.shape}")
                     return True
+            
+            # 2. pickle이 없으면 wage_increase.xlsx에서 로드
+            if os.path.exists(self.master_excel_file):
+                logging.info(f"Loading master data from {self.master_excel_file}")
+                self.load_data_from_file(self.master_excel_file, save_file=False)
+                return True
+                
         except Exception as e:
-            logging.warning(f"Failed to load default data from pickle: {e}")
+            logging.warning(f"Failed to load master data: {e}")
         return False
     
     def _save_data_to_pickle(self) -> None:
@@ -51,28 +68,30 @@ class DataService:
             logging.error(f"Failed to save data to pickle: {e}")
     
     def get_default_data_status(self) -> Dict[str, Any]:
-        """기본 데이터 상태 확인"""
+        """마스터 데이터 상태 확인"""
         return {
-            "has_default_data": self.current_data is not None,
+            "has_master_data": self.current_data is not None,
             "pickle_exists": self.pickle_file.exists(),
+            "master_excel_exists": os.path.exists(self.master_excel_file),
             "data_shape": self.current_data.shape if self.current_data is not None else None,
-            "pickle_file_path": str(self.pickle_file)
+            "pickle_file_path": str(self.pickle_file),
+            "master_excel_path": self.master_excel_file
         }
     
     def save_uploaded_file(self, file_content: bytes, filename: str) -> str:
-        """업로드된 파일을 저장하고 경로 반환"""
-        # 파일명에 타임스탬프 추가하여 중복 방지
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        name, ext = os.path.splitext(filename)
-        safe_filename = f"{name}_{timestamp}{ext}"
+        """업로드된 파일을 임시로 처리 (저장하지 않음)"""
+        # 파일을 저장하지 않고 임시 파일 경로만 반환
+        # 실제로는 메모리에서 직접 처리
+        import tempfile
         
-        file_path = self.upload_dir / safe_filename
-        with open(file_path, "wb") as f:
-            f.write(file_content)
+        # 임시 파일 생성
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp_file:
+            tmp_file.write(file_content)
+            temp_path = tmp_file.name
         
-        return str(file_path)
+        return temp_path
     
-    def load_data_from_file(self, file_path: str) -> Dict[str, Any]:
+    def load_data_from_file(self, file_path: str, save_file: bool = True) -> Dict[str, Any]:
         """파일에서 데이터 로드 및 분석"""
         try:
             # 파일 확장자에 따라 적절한 로더 사용
@@ -90,8 +109,16 @@ class DataService:
             data_info = self._analyze_dataframe(df)
             self.data_info = data_info
             
-            # pickle 파일로 저장
-            self._save_data_to_pickle()
+            # pickle 파일로 저장 (save_file이 True일 때만)
+            if save_file:
+                self._save_data_to_pickle()
+            
+            # 임시 파일인 경우 삭제
+            if save_file and file_path.startswith('/tmp') or file_path.startswith('/var'):
+                try:
+                    os.remove(file_path)
+                except:
+                    pass
             
             return data_info
             
@@ -238,6 +265,9 @@ class DataService:
         if self.current_data is None:
             raise ValueError("No data loaded for augmentation")
         
+        # 재현성을 위한 랜덤 시드 고정 - 이 함수에서만 로컬하게 사용
+        rng = np.random.RandomState(42)  # 전역 상태를 변경하지 않음
+        
         original_df = self.current_data.copy()
         original_size = len(original_df)
         
@@ -269,7 +299,7 @@ class DataService:
                         pd.api.types.is_numeric_dtype(original_df[col])):
                         if pd.notna(new_row[col]) and new_row[col] != 0:
                             # ±1% 범위의 노이즈
-                            noise = np.random.normal(0, abs(new_row[col]) * noise_factor)
+                            noise = rng.normal(0, abs(new_row[col]) * noise_factor)
                             new_row[col] = new_row[col] + noise
                 
                 augmented_rows.append(new_row)

@@ -27,6 +27,7 @@ class ModelingService:
         self.current_model = None
         self.model_results = None
         self.is_setup_complete = False
+        self.is_model_trained_individually = False  # 개별 모델 학습 여부
         
         # 데이터 크기에 따른 모델 선택
         self.small_data_models = ['lr', 'ridge', 'lasso', 'en', 'dt']
@@ -110,6 +111,15 @@ class ModelingService:
         # '-' 값을 NaN으로 변환 (PyCaret이 인식할 수 있도록)
         df = df.replace(['-', ''], np.nan)
         
+        # 범주형으로 보이는 숫자 컬럼을 실제 숫자로 변환
+        for col in df.columns:
+            if col != target_column:
+                try:
+                    # 숫자로 변환 가능한 컬럼은 변환
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                except:
+                    pass
+        
         # 년도 컬럼 제거 (시계열 인덱스이므로 피처에서 제외)
         year_columns = ['year', 'Year', 'YEAR', '년도', '연도']
         for year_col in year_columns:
@@ -144,9 +154,11 @@ class ModelingService:
         self, 
         target_column: str, 
         train_size: Optional[float] = None,
-        session_id: int = 123
+        session_id: int = 42
     ) -> Dict[str, Any]:
         """PyCaret 환경 설정"""
+        
+        # session_id로 충분함 - 추가 seed 설정 제거
         
         if not self.check_pycaret_availability():
             raise RuntimeError("PyCaret is not available. Please install it first.")
@@ -195,6 +207,10 @@ class ModelingService:
                 feature_selection=optimal_settings['feature_selection'],
                 n_features_to_select=optimal_settings['n_features_to_select'],
                 
+                # Feature 생성 설정 (성능 향상을 위해 polynomial features 활성화)
+                polynomial_features=True,  # 다항식 feature 생성 활성화 (예측 정확도 향상)
+                polynomial_degree=2,  # 2차 다항식까지만 생성
+                
                 # CV 전략
                 fold_strategy='kfold',
                 fold=optimal_settings['cv_folds']
@@ -224,6 +240,8 @@ class ModelingService:
         
         if not self.is_setup_complete:
             raise RuntimeError("PyCaret environment not setup. Call setup_pycaret_environment first.")
+        
+        # PyCaret이 자체적으로 seed를 관리하도록 함
         
         # 현재 데이터 크기 확인
         data_size = len(data_service.current_data)
@@ -260,6 +278,9 @@ class ModelingService:
                 'recommended_model': best_models[0] if best_models else None
             }
             
+            # current_model 설정
+            self.current_model = best_models[0] if best_models else None
+            
         except Exception as e:
             # 실패 시 기본 선형 회귀 사용
             warnings.warn(f"Model comparison failed: {str(e)}. Using default linear regression.")
@@ -271,6 +292,7 @@ class ModelingService:
                 'recommended_model': linear_model,
                 'fallback_used': True
             }
+            self.current_model = linear_model
             
         finally:
             # 출력 복원
@@ -291,6 +313,8 @@ class ModelingService:
         
         if not self.is_setup_complete:
             raise RuntimeError("PyCaret environment not setup. Call setup_pycaret_environment first.")
+        
+        # PyCaret이 자체적으로 seed를 관리하도록 함
         
         old_stdout = sys.stdout
         old_stderr = sys.stderr
@@ -316,6 +340,7 @@ class ModelingService:
                 final_model = tuned_model
             
             self.current_model = final_model
+            self.is_model_trained_individually = True  # 개별 모델 학습 완료
             
         except Exception as e:
             raise RuntimeError(f"Model training failed: {str(e)}")
@@ -414,10 +439,11 @@ class ModelingService:
         return {
             'pycaret_available': self.check_pycaret_availability(),
             'environment_setup': self.is_setup_complete,
-            'model_trained': self.current_model is not None,
+            'model_trained': self.is_model_trained_individually,  # 개별 학습 여부로 변경
             'models_compared': self.model_results is not None,
             'data_loaded': data_service.current_data is not None,
-            'current_model_type': type(self.current_model).__name__ if self.current_model else None
+            'current_model_type': type(self.current_model).__name__ if self.current_model else None,
+            'has_model': self.current_model is not None  # 모델 존재 여부
         }
     
     def clear_models(self) -> Dict[str, Any]:
@@ -426,6 +452,7 @@ class ModelingService:
         self.current_model = None
         self.model_results = None
         self.is_setup_complete = False
+        self.is_model_trained_individually = False  # 개별 학습 상태도 초기화
         
         return {
             'message': 'All models and experiments cleared successfully'

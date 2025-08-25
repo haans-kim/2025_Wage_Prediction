@@ -61,7 +61,6 @@ async def upload_data(file: UploadFile = File(...)) -> Dict[str, Any]:
         return {
             "message": "File uploaded and processed successfully",
             "filename": file.filename,
-            "file_path": saved_path,
             "data_analysis": data_info,
             "validation": validation_result,
             "summary": summary
@@ -73,10 +72,10 @@ async def upload_data(file: UploadFile = File(...)) -> Dict[str, Any]:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
-@router.get("/sample")
-async def get_sample_data(rows: int = Query(default=10, ge=1, le=1000)) -> Dict[str, Any]:
+@router.get("/master")
+async def get_master_data(rows: int = Query(default=10, ge=1, le=1000)) -> Dict[str, Any]:
     """
-    샘플 데이터 반환 (wage_increase.xlsx 파일 기반)
+    마스터 데이터 반환 (wage_increase.xlsx 파일 기반)
     """
     try:
         # 기존 wage_increase.xlsx 파일이 있는지 확인
@@ -87,7 +86,7 @@ async def get_sample_data(rows: int = Query(default=10, ge=1, le=1000)) -> Dict[
             sample_data = data_service.get_sample_data(rows)
             
             return {
-                "message": "Sample data loaded successfully",
+                "message": "Master data loaded successfully",
                 "source": "wage_increase.xlsx",
                 "data": sample_data["data"],
                 "summary": data_service.get_data_summary(),
@@ -216,29 +215,30 @@ async def get_data_status() -> Dict[str, Any]:
             "message": "Data status retrieved successfully",
             "status": status,
             "current_data_shape": status["data_shape"],
-            "has_default_data": status["has_default_data"]
+            "has_master_data": status.get("has_master_data", status.get("has_default_data", False)),
+            "master_data_source": "pickle" if status.get("pickle_exists") else "excel" if status.get("master_excel_exists") else "none"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting data status: {str(e)}")
 
-@router.post("/load-default")
-async def load_default_data() -> Dict[str, Any]:
+@router.post("/load-master")
+async def load_master_data() -> Dict[str, Any]:
     """
-    기본 데이터 로드 (pickle 파일에서)
+    마스터 데이터 로드 (pickle 파일 또는 wage_increase.xlsx에서)
     """
     try:
-        success = data_service._load_default_data()
+        success = data_service._load_master_data()
         if success:
             summary = data_service.get_data_summary()
             return {
-                "message": "Default data loaded successfully",
+                "message": "Master data loaded successfully",
                 "summary": summary,
-                "loaded_from_pickle": True
+                "source": "pickle" if data_service.pickle_file.exists() else "wage_increase.xlsx"
             }
         else:
-            raise HTTPException(status_code=404, detail="No default data available")
+            raise HTTPException(status_code=404, detail="No master data available. Please ensure wage_increase.xlsx exists.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading default data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error loading master data: {str(e)}")
 
 @router.post("/augment")
 async def augment_data(request: DataAugmentationRequest) -> Dict[str, Any]:

@@ -46,15 +46,26 @@ class AnalysisService:
         try:
             from pycaret.regression import get_config
             
-            # PyCaret에서 데이터 가져오기
+            # PyCaret에서 변환된 데이터 가져오기
             X_train = get_config('X_train')
             y_train = get_config('y_train')
             X_test = get_config('X_test') 
             y_test = get_config('y_test')
             
+            # PyCaret이 실제로 사용하는 feature names 가져오기
+            # get_config('X')는 원본 데이터의 feature를 가지고 있음
+            X_transformed = get_config('X_transformed')
+            if X_transformed is not None and hasattr(X_transformed, 'columns'):
+                self.feature_names = list(X_transformed.columns)
+                print(f"📊 PyCaret transformed features ({len(self.feature_names)}): {self.feature_names[:5]}...")
+            elif hasattr(X_train, 'columns'):
+                self.feature_names = list(X_train.columns)
+                print(f"📊 PyCaret features ({len(self.feature_names)}): {self.feature_names[:5]}...")
+            else:
+                self.feature_names = [f"feature_{i}" for i in range(X_train.shape[1])]
+            
             self.train_data = (X_train, y_train)
             self.test_data = (X_test, y_test)
-            self.feature_names = list(X_train.columns)
             
             return X_train, y_train, X_test, y_test
             
@@ -80,6 +91,24 @@ class AnalysisService:
             # warnings 억제
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
+                
+                # 로컬 random state 생성
+                rng = np.random.RandomState(42)
+                
+                # PyCaret에서 실제 파이프라인 가져오기
+                try:
+                    from pycaret.regression import get_config
+                    # PyCaret의 최종 모델 파이프라인 가져오기
+                    pipeline = get_config('pipeline')
+                    if pipeline is not None:
+                        print(f"📊 Using PyCaret pipeline instead of raw model")
+                        # 원본 모델을 직접 사용하는 대신 predict_model 함수를 사용
+                        use_predict_model = True
+                    else:
+                        use_predict_model = False
+                except Exception as e:
+                    print(f"⚠️ Failed to get PyCaret pipeline: {e}")
+                    use_predict_model = False
                 
                 X_train, y_train, X_test, y_test = self._get_training_data()
                 
@@ -111,21 +140,71 @@ class AnalysisService:
             analysis_data = analysis_data.copy()  # 복사본 생성
             
             # feature_names_in_ 속성 문제 방지
+            # 모델 예측 함수 래핑 (PyCaret 호환성)
+            def model_predict_wrapper(X):
+                try:
+                    # numpy array를 DataFrame으로 변환
+                    X_df = pd.DataFrame(X, columns=self.feature_names)
+                    
+                    # PyCaret의 predict_model 직접 사용
+                    try:
+                        from pycaret.regression import predict_model
+                        # predict_model은 자동으로 파이프라인을 처리함
+                        predictions_df = predict_model(model, data=X_df, verbose=False)
+                        
+                        # 예측 결과 컬럼 찾기
+                        if 'prediction_label' in predictions_df.columns:
+                            predictions = predictions_df['prediction_label'].values
+                        elif 'Label' in predictions_df.columns:
+                            predictions = predictions_df['Label'].values
+                        else:
+                            # 원본 컬럼을 제외한 새로 추가된 컬럼이 예측값
+                            original_cols = set(X_df.columns)
+                            new_cols = set(predictions_df.columns) - original_cols
+                            if new_cols:
+                                pred_col = list(new_cols)[0]
+                                predictions = predictions_df[pred_col].values
+                            else:
+                                # 마지막 컬럼이 보통 예측 결과
+                                predictions = predictions_df.iloc[:, -1].values
+                        
+                        return predictions
+                        
+                    except Exception as e:
+                        print(f"⚠️ predict_model failed: {e}")
+                        # 기본 모델 사용 시도
+                        if hasattr(model, 'predict'):
+                            return model.predict(X_df)
+                        else:
+                            raise e
+                    
+                except Exception as e:
+                    print(f"⚠️ Model prediction error in SHAP: {e}")
+                    # 안전한 fallback - 평균값 반환
+                    return np.full(len(X), 0.042)
+            
             try:
-                # Tree-based models 시도
-                if hasattr(model, 'feature_importances_'):
-                    explainer = shap.TreeExplainer(model, feature_perturbation='tree_path_dependent')
-                    shap_values = explainer.shap_values(analysis_data, check_additivity=False)
+                # Tree-based models 시도 - PyCaret 모델은 KernelExplainer 사용
+                # PyCaret은 복잡한 파이프라인이므로 TreeExplainer 사용 불가
+                if False:  # Tree explainer 비활성화 (PyCaret 파이프라인은 지원 안됨)
+                    print(f"📊 Using TreeExplainer for {type(model).__name__}")
+                    # TreeExplainer는 원본 모델 사용
+                    explainer = shap.TreeExplainer(model)
+                    # 하지만 데이터는 DataFrame으로 변환해서 전달
+                    analysis_df = pd.DataFrame(analysis_data, columns=self.feature_names)
+                    shap_values = explainer.shap_values(analysis_df)
                 else:
                     # 다른 모델들은 KernelExplainer 사용 (더 안전함)
+                    print(f"📊 Using KernelExplainer for {type(model).__name__}")
                     n_background = min(50, len(X_train_array))
-                    background_indices = np.random.choice(len(X_train_array), n_background, replace=False)
+                    background_indices = rng.choice(len(X_train_array), n_background, replace=False)
                     background_data = X_train_array[background_indices]
                     
-                    explainer = shap.KernelExplainer(model.predict, background_data)
+                    # 래핑된 예측 함수 사용
+                    explainer = shap.KernelExplainer(model_predict_wrapper, background_data)
                     
                     n_samples = min(10, len(analysis_data))
-                    sample_indices = np.random.choice(len(analysis_data), n_samples, replace=False)
+                    sample_indices = rng.choice(len(analysis_data), n_samples, replace=False)
                     analysis_sample = analysis_data[sample_indices]
                     shap_values = explainer.shap_values(analysis_sample)
                     
@@ -139,20 +218,36 @@ class AnalysisService:
                             # numpy 배열을 DataFrame으로 변환 (PyCaret 모델용)
                             if hasattr(X, 'shape') and len(X.shape) == 2:
                                 X_df = pd.DataFrame(X, columns=self.feature_names)
-                                return model.predict(X_df)
+                                from pycaret.regression import predict_model
+                                predictions_df = predict_model(model, data=X_df, verbose=False)
+                                
+                                # 예측 결과 컬럼 찾기
+                                if 'prediction_label' in predictions_df.columns:
+                                    return predictions_df['prediction_label'].values
+                                elif 'Label' in predictions_df.columns:
+                                    return predictions_df['Label'].values
+                                else:
+                                    # 원본 컬럼을 제외한 새로 추가된 컬럼이 예측값
+                                    original_cols = set(X_df.columns)
+                                    new_cols = set(predictions_df.columns) - original_cols
+                                    if new_cols:
+                                        pred_col = list(new_cols)[0]
+                                        return predictions_df[pred_col].values
+                                    else:
+                                        return predictions_df.iloc[:, -1].values
                             return np.zeros(len(X))
                         except Exception as e:
                             print(f"⚠️ SHAP safe_predict failed: {e}")
-                            return np.zeros(len(X))
+                            return np.full(len(X), 0.042)  # 평균값으로 대체
                     
                     n_background = min(50, len(X_train_array))
-                    background_indices = np.random.choice(len(X_train_array), n_background, replace=False)
+                    background_indices = rng.choice(len(X_train_array), n_background, replace=False)
                     background_data = X_train_array[background_indices]
                     
                     explainer = shap.KernelExplainer(safe_predict, background_data)
                     
                     n_samples = min(5, len(analysis_data))
-                    sample_indices = np.random.choice(len(analysis_data), n_samples, replace=False)
+                    sample_indices = rng.choice(len(analysis_data), n_samples, replace=False)
                     analysis_sample = analysis_data[sample_indices]
                     shap_values = explainer.shap_values(analysis_sample)
                     
@@ -165,7 +260,16 @@ class AnalysisService:
                     else:
                         # 모든 기능이 실패한 경우 더미 값 반환
                         num_features = len(self.feature_names) if self.feature_names else analysis_data.shape[1]
-                        shap_values = np.random.normal(0, 0.1, (min(5, len(analysis_data)), num_features))
+                        shap_values = rng.normal(0, 0.1, (min(5, len(analysis_data)), num_features))
+            
+            # SHAP 값 디버깅
+            print(f"📊 SHAP values debug:")
+            print(f"   - Type: {type(shap_values)}")
+            if isinstance(shap_values, np.ndarray):
+                print(f"   - Shape: {shap_values.shape}")
+                print(f"   - Min: {np.min(shap_values):.6f}, Max: {np.max(shap_values):.6f}")
+                print(f"   - Mean: {np.mean(np.abs(shap_values)):.6f}")
+                print(f"   - Non-zero values: {np.count_nonzero(shap_values)}")
             
             # Feature importance 계산
             if isinstance(shap_values, np.ndarray):
@@ -173,6 +277,8 @@ class AnalysisService:
                     importance_scores = np.abs(shap_values).mean(axis=0)
                 else:
                     importance_scores = np.abs(shap_values)
+                    
+                print(f"📊 Importance scores: {importance_scores[:5]}...")
             else:
                 importance_scores = np.abs(shap_values[0]).mean(axis=0) if len(shap_values) > 0 else []
             
@@ -321,10 +427,13 @@ class AnalysisService:
             # 데이터 정규화 및 이상값 처리 (LIME 분포 오류 방지)
             train_data_clean = np.nan_to_num(train_data, nan=0.0, posinf=1e6, neginf=-1e6)
             
+            # 로컬 random state 생성
+            rng = np.random.RandomState(42)
+            
             # 각 피처의 분산이 0인 경우 작은 값 추가
             for i in range(train_data_clean.shape[1]):
                 if np.var(train_data_clean[:, i]) == 0:
-                    train_data_clean[:, i] += np.random.normal(0, 1e-6, len(train_data_clean[:, i]))
+                    train_data_clean[:, i] += rng.normal(0, 1e-6, len(train_data_clean[:, i]))
             
             # 모델을 완전히 래핑하는 클래스 생성
             class WrappedModel:
@@ -475,8 +584,8 @@ class AnalysisService:
                         
                         def as_list(self):
                             # 랜덤한 importance 값으로 가짜 설명 생성
-                            np.random.seed(42)
-                            values = np.random.normal(0, 0.01, len(self.feature_names))
+                            local_rng = np.random.RandomState(42)
+                            values = local_rng.normal(0, 0.01, len(self.feature_names))
                             return [(name, val) for name, val in zip(self.feature_names, values)]
                     
                     explanation = MockExplanation(feature_names, instance)

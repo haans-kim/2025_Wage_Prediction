@@ -64,8 +64,8 @@ export const DataUpload: React.FC = () => {
       const status = await apiClient.getDataStatus();
       setDataStatus(status);
       
-      // 기본 데이터가 있는 경우 현재 데이터도 확인
-      if (status.status.has_default_data) {
+      // 마스터 데이터가 있는 경우 현재 데이터도 확인
+      if (status.status.has_master_data) {
         try {
           const response = await apiClient.getCurrentData(5, false);
           if (response) {
@@ -88,7 +88,7 @@ export const DataUpload: React.FC = () => {
 
     try {
       const result = await apiClient.loadDefaultData();
-      setSuccess("기본 데이터가 성공적으로 로드되었습니다.");
+      setSuccess("마스터 데이터가 성공적으로 로드되었습니다.");
       setSampleData({
         message: result.message,
         source: "pickle",
@@ -98,7 +98,7 @@ export const DataUpload: React.FC = () => {
       setShowDataPreview(true);
       await checkDataStatus(); // 상태 새로고침
     } catch (error) {
-      setError(error instanceof Error ? error.message : '기본 데이터 로드 중 오류가 발생했습니다.');
+      setError(error instanceof Error ? error.message : '마스터 데이터 로드 중 오류가 발생했습니다.');
     } finally {
       setLoadingDefault(false);
     }
@@ -162,7 +162,7 @@ export const DataUpload: React.FC = () => {
       setSampleData(result);
       setShowDataPreview(true);
     } catch (error) {
-      setError(error instanceof Error ? error.message : '샘플 데이터 로드 중 오류가 발생했습니다.');
+      setError(error instanceof Error ? error.message : '마스터 데이터 로드 중 오류가 발생했습니다.');
     } finally {
       setLoadingSample(false);
     }
@@ -266,14 +266,14 @@ export const DataUpload: React.FC = () => {
               데이터 상태
             </CardTitle>
             <CardDescription>
-              현재 로드된 데이터와 기본 데이터 정보
+              현재 로드된 데이터와 마스터 데이터 정보
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm">기본 데이터 파일:</span>
-              <span className={`text-sm font-medium ${dataStatus.status.has_default_data ? 'text-green-600' : 'text-muted-foreground'}`}>
-                {dataStatus.status.has_default_data ? '사용 가능' : '없음'}
+              <span className="text-sm">마스터 데이터 파일:</span>
+              <span className={`text-sm font-medium ${dataStatus.status.has_master_data ? 'text-green-600' : 'text-muted-foreground'}`}>
+                {dataStatus.status.has_master_data ? '사용 가능' : '없음'}
               </span>
             </div>
             {dataStatus.status.data_shape && (
@@ -289,7 +289,7 @@ export const DataUpload: React.FC = () => {
                 variant="outline" 
                 size="sm"
                 onClick={loadDefaultData}
-                disabled={loadingDefault || !dataStatus.status.has_default_data}
+                disabled={loadingDefault || !dataStatus.status.has_master_data}
                 className="flex-1"
               >
                 {loadingDefault ? (
@@ -300,7 +300,7 @@ export const DataUpload: React.FC = () => {
                 ) : (
                   <>
                     <Database className="mr-2 h-4 w-4" />
-                    기본 데이터 로드
+                    마스터 데이터 로드
                   </>
                 )}
               </Button>
@@ -389,12 +389,12 @@ export const DataUpload: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Sample Data Card */}
+        {/* Master Data Card */}
         <Card>
           <CardHeader>
-            <CardTitle>샘플 데이터</CardTitle>
+            <CardTitle>마스터 데이터</CardTitle>
             <CardDescription>
-              기본 제공되는 샘플 데이터를 사용하여 바로 시작할 수 있습니다.
+              기본 제공되는 마스터 데이터를 사용하여 바로 시작할 수 있습니다.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -405,7 +405,7 @@ export const DataUpload: React.FC = () => {
               disabled={loadingSample}
             >
               <Download className="mr-2 h-4 w-4" />
-              {loadingSample ? '로드 중...' : '샘플 데이터 사용'}
+              {loadingSample ? '로드 중...' : '마스터 데이터 사용'}
             </Button>
           </CardContent>
         </Card>
@@ -456,14 +456,14 @@ export const DataUpload: React.FC = () => {
         </div>
       )}
 
-      {/* Sample Data Result */}
+      {/* Master Data Result */}
       {sampleData && (
         <div className="space-y-4">
-          <h2 className="text-xl font-semibold">샘플 데이터</h2>
+          <h2 className="text-xl font-semibold">마스터 데이터</h2>
           
           <Alert>
             <Download className="h-4 w-4" />
-            <AlertTitle>샘플 데이터 로드됨</AlertTitle>
+            <AlertTitle>마스터 데이터 로드됨</AlertTitle>
             <AlertDescription>
               {sampleData.source === 'generated' 
                 ? '시연용 가상 데이터가 생성되었습니다.'

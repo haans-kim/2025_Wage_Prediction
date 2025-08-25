@@ -169,8 +169,30 @@ class DashboardService:
             # 입력 데이터 준비
             model_input = self._prepare_model_input(input_data)
             
-            # 예측 수행
-            prediction = model.predict(model_input)[0]
+            # 예측 수행 (PyCaret 모델 사용)
+            try:
+                from pycaret.regression import predict_model
+                predictions_df = predict_model(model, data=model_input, verbose=False)
+                
+                # 예측 결과 컬럼 찾기
+                if 'prediction_label' in predictions_df.columns:
+                    prediction = predictions_df['prediction_label'].values[0]
+                elif 'Label' in predictions_df.columns:
+                    prediction = predictions_df['Label'].values[0]
+                else:
+                    # 원본 컬럼을 제외한 새로 추가된 컬럼이 예측값
+                    original_cols = set(model_input.columns)
+                    new_cols = set(predictions_df.columns) - original_cols
+                    if new_cols:
+                        pred_col = list(new_cols)[0]
+                        prediction = predictions_df[pred_col].values[0]
+                    else:
+                        # 마지막 컬럼이 보통 예측 결과
+                        prediction = predictions_df.iloc[0, -1]
+            except Exception as e:
+                print(f"⚠️ PyCaret predict_model failed: {e}")
+                # Fallback: 직접 predict 시도
+                prediction = model.predict(model_input)[0]
             
             # 신뢰구간 계산 (간단한 방법 - 잔차 기반)
             try:
