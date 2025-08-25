@@ -207,9 +207,9 @@ class ModelingService:
                 feature_selection=optimal_settings['feature_selection'],
                 n_features_to_select=optimal_settings['n_features_to_select'],
                 
-                # Feature 생성 설정 (성능 향상을 위해 polynomial features 활성화)
-                polynomial_features=True,  # 다항식 feature 생성 활성화 (예측 정확도 향상)
-                polynomial_degree=2,  # 2차 다항식까지만 생성
+                # Feature 생성 설정
+                polynomial_features=False,  # 다항식 feature 생성 비활성화 (feature 이름 충돌 방지)
+                polynomial_degree=2,  # 다항식 차수 (사용 안 함)
                 
                 # CV 전략
                 fold_strategy='kfold',
@@ -415,14 +415,49 @@ class ModelingService:
             # 사용자 제공 데이터로 예측
             try:
                 old_stdout = sys.stdout
+                old_stderr = sys.stderr
                 sys.stdout = io.StringIO()
+                sys.stderr = io.StringIO()
                 
-                predictions = predict_model(self.current_model, data=prediction_data)
+                # PyCaret의 TransformerWrapper를 사용하여 변환 파이프라인 가져오기
+                try:
+                    # get_config를 사용하여 현재 실험의 변환 파이프라인 가져오기
+                    X_train = get_config('X_train')
+                    
+                    # 학습 시 사용된 feature 이름 가져오기
+                    if hasattr(X_train, 'columns'):
+                        expected_features = X_train.columns.tolist()
+                    else:
+                        expected_features = None
+                    
+                    # prediction_data의 컬럼을 학습 시 사용된 feature에 맞게 조정
+                    if expected_features:
+                        # 필요한 컬럼만 선택하고 순서 맞추기
+                        available_cols = [col for col in expected_features if col in prediction_data.columns]
+                        prediction_data_aligned = prediction_data[available_cols].copy()
+                        
+                        # 누락된 컬럼이 있으면 0으로 채우기 (polynomial features 등)
+                        for col in expected_features:
+                            if col not in prediction_data_aligned.columns:
+                                prediction_data_aligned[col] = 0
+                        
+                        # 컬럼 순서 맞추기
+                        prediction_data_aligned = prediction_data_aligned[expected_features]
+                    else:
+                        prediction_data_aligned = prediction_data
+                    
+                    predictions = predict_model(self.current_model, data=prediction_data_aligned)
+                    
+                except Exception as align_error:
+                    # 정렬 실패 시 원본 데이터로 예측 시도
+                    warnings.warn(f"Feature alignment failed: {str(align_error)}. Trying with original data.")
+                    predictions = predict_model(self.current_model, data=prediction_data)
                 
             except Exception as e:
                 raise RuntimeError(f"Prediction with custom data failed: {str(e)}")
             finally:
                 sys.stdout = old_stdout
+                sys.stderr = old_stderr
             
             prediction_results = None
         

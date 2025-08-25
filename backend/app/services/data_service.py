@@ -15,15 +15,8 @@ class DataService:
         self.data_dir = Path("data")
         self.data_dir.mkdir(exist_ok=True)
         self.pickle_file = self.data_dir / "master_data.pkl"
-        # 스케일된 데이터 > 정제된 데이터 > 원본 데이터 순으로 사용
-        scaled_file = "wage_increase_scaled.xlsx"
-        cleaned_file = "wage_increase_cleaned.xlsx"
-        if os.path.exists(scaled_file):
-            self.master_excel_file = scaled_file
-        elif os.path.exists(cleaned_file):
-            self.master_excel_file = cleaned_file
-        else:
-            self.master_excel_file = "wage_increase.xlsx"
+        # 원본 데이터를 우선 사용 (문자열 값 처리를 PyCaret에 맡김)
+        self.master_excel_file = "wage_increase.xlsx"
         self.current_data: Optional[pd.DataFrame] = None
         self.data_info: Optional[Dict[str, Any]] = None
         
