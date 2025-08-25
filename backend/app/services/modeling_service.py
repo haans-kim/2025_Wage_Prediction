@@ -303,12 +303,28 @@ class ModelingService:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
         
+        # comparison_df를 JSON으로 변환
+        comparison_results = []
+        if self.model_results['comparison_df'] is not None:
+            df = self.model_results['comparison_df']
+            for idx, row in df.iterrows():
+                comparison_results.append({
+                    'Model': idx if isinstance(idx, str) else str(idx),
+                    'MAE': float(row.get('MAE', 0)) if 'MAE' in row else None,
+                    'MSE': float(row.get('MSE', 0)) if 'MSE' in row else None,
+                    'RMSE': float(row.get('RMSE', 0)) if 'RMSE' in row else None,
+                    'R2': float(row.get('R2', 0)) if 'R2' in row else None,
+                    'RMSLE': float(row.get('RMSLE', 0)) if 'RMSLE' in row else None,
+                    'MAPE': float(row.get('MAPE', 0)) if 'MAPE' in row else None
+                })
+        
         return {
             'message': 'Model comparison completed',
             'models_compared': len(models_to_use),
             'best_model_count': len(self.model_results['best_models']),
             'recommended_model_type': type(self.model_results['recommended_model']).__name__,
             'comparison_available': self.model_results['comparison_df'] is not None,
+            'comparison_results': comparison_results,
             'data_size_category': 'small' if data_size < 30 else 'medium' if data_size < 100 else 'large'
         }
     
@@ -354,6 +370,31 @@ class ModelingService:
                 self.performance_model = final_model
                 logging.info("Performance model stored")
             
+            # 모델 평가 메트릭 가져오기
+            try:
+                # 현재 모델의 성능 평가
+                from pycaret.regression import predict_model, pull
+                predictions = predict_model(final_model, verbose=False)
+                metrics = pull()
+                
+                # 메트릭 추출
+                model_metrics = {}
+                if metrics is not None and not metrics.empty:
+                    if 'MAE' in metrics.columns:
+                        model_metrics['MAE'] = float(metrics['MAE'].iloc[-1])
+                    if 'MSE' in metrics.columns:
+                        model_metrics['MSE'] = float(metrics['MSE'].iloc[-1])
+                    if 'RMSE' in metrics.columns:
+                        model_metrics['RMSE'] = float(metrics['RMSE'].iloc[-1])
+                    if 'R2' in metrics.columns:
+                        model_metrics['R2'] = float(metrics['R2'].iloc[-1])
+                    if 'RMSLE' in metrics.columns:
+                        model_metrics['RMSLE'] = float(metrics['RMSLE'].iloc[-1])
+                    if 'MAPE' in metrics.columns:
+                        model_metrics['MAPE'] = float(metrics['MAPE'].iloc[-1])
+            except:
+                model_metrics = {}
+            
         except Exception as e:
             raise RuntimeError(f"Model training failed: {str(e)}")
         finally:
@@ -364,7 +405,8 @@ class ModelingService:
         return {
             'message': f'Model {model_name} trained successfully',
             'model_type': type(self.current_model).__name__,
-            'model_name': model_name
+            'model_name': model_name,
+            'metrics': model_metrics if model_metrics else None
         }
     
     def get_model_evaluation(self) -> Dict[str, Any]:

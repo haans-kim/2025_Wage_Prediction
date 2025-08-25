@@ -27,24 +27,15 @@ interface ModelingStatus {
   current_model_type?: string;
 }
 
-interface AvailableModel {
-  code: string;
-  name: string;
-  recommended: boolean;
-}
-
 export const Modeling: React.FC = () => {
   const [status, setStatus] = useState<ModelingStatus | null>(null);
-  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [recommendations, setRecommendations] = useState<any>(null);
-  const [targetColumn, setTargetColumn] = useState<string>('');
-  const [modelType, setModelType] = useState<'baseup' | 'performance' | 'both'>('both');
-  const [availableColumns, setAvailableColumns] = useState<string[]>([]);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [setupResult, setSetupResult] = useState<any>(null);
-  const [comparisonResult, setComparisonResult] = useState<any>(null);
-  const [trainingResult, setTrainingResult] = useState<any>(null);
+  const [dualModelResults, setDualModelResults] = useState<{
+    baseup?: any;
+    performance?: any;
+  }>({});
 
   useEffect(() => {
     loadInitialData();
@@ -52,104 +43,62 @@ export const Modeling: React.FC = () => {
 
   const loadInitialData = async () => {
     try {
-      // 모델링 상태 및 데이터 확인
-      const [statusRes, currentDataRes] = await Promise.all([
-        apiClient.getModelingStatus(),
-        apiClient.getCurrentData(5, false).catch(() => null)
-      ]);
-
+      const statusRes = await apiClient.getModelingStatus();
       setStatus(statusRes);
       
-      if (currentDataRes?.summary?.columns) {
-        setAvailableColumns(currentDataRes.summary.columns);
-      }
-
-      // 권고사항 로드 (데이터가 있는 경우)
       if (statusRes.data_loaded) {
         const recsRes = await apiClient.getModelingRecommendations();
         setRecommendations(recsRes);
-
-        const modelsRes = await apiClient.getAvailableModels();
-        setAvailableModels(modelsRes.available_models || []);
       }
     } catch (error) {
       console.error('Failed to load initial data:', error);
     }
   };
 
-  const handleSetupModeling = async () => {
-    setLoading('setup');
+  const handleCompareAndTrainBothModels = async () => {
+    setLoading('dual-process');
     setError(null);
+    setDualModelResults({});
 
     try {
-      if (modelType === 'both') {
-        // 두 모델을 순차적으로 설정
-        const baseupResult = await apiClient.setupModeling('wage_increase_bu_sbl');
-        const performanceResult = await apiClient.setupModeling('wage_increase_mi_sbl');
-        setSetupResult({ baseup: baseupResult, performance: performanceResult });
-      } else {
-        // 단일 모델 설정
-        const selectedTarget = modelType === 'baseup' ? 'wage_increase_bu_sbl' : 'wage_increase_mi_sbl';
-        const result = await apiClient.setupModeling(selectedTarget);
-        setSetupResult(result);
+      const results: any = {};
+      
+      // Base-up 모델 처리
+      console.log('Base-up 모델 처리 시작...');
+      await apiClient.setupModeling('wage_increase_bu_sbl');
+      const baseupComparison = await apiClient.compareModels(5);
+      
+      if (baseupComparison.comparison_results && baseupComparison.comparison_results[0]) {
+        const bestBaseupModel = baseupComparison.comparison_results[0].Model;
+        const baseupTraining = await apiClient.trainModel(bestBaseupModel, false);
+        results.baseup = {
+          comparison: baseupComparison,
+          training: baseupTraining,
+          selectedModel: bestBaseupModel,
+          metrics: baseupComparison.comparison_results[0]
+        };
       }
-      await loadInitialData(); // 상태 새로고침
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '환경 설정 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  const handleCompareModels = async () => {
-    setLoading('compare');
-    setError(null);
-
-    try {
-      if (modelType === 'both') {
-        // Base-up 모델 환경 설정 및 비교
-        await apiClient.setupModeling('wage_increase_bu_sbl');
-        const baseupComparison = await apiClient.compareModels(3);
-        
-        // Performance 모델 환경 설정 및 비교
-        await apiClient.setupModeling('wage_increase_mi_sbl');
-        const performanceComparison = await apiClient.compareModels(3);
-        
-        setComparisonResult({ baseup: baseupComparison, performance: performanceComparison });
-      } else {
-        const result = await apiClient.compareModels(3);
-        setComparisonResult(result);
+      
+      // Performance 모델 처리
+      console.log('성과급 모델 처리 시작...');
+      await apiClient.setupModeling('wage_increase_mi_sbl');
+      const performanceComparison = await apiClient.compareModels(5);
+      
+      if (performanceComparison.comparison_results && performanceComparison.comparison_results[0]) {
+        const bestPerformanceModel = performanceComparison.comparison_results[0].Model;
+        const performanceTraining = await apiClient.trainModel(bestPerformanceModel, false);
+        results.performance = {
+          comparison: performanceComparison,
+          training: performanceTraining,
+          selectedModel: bestPerformanceModel,
+          metrics: performanceComparison.comparison_results[0]
+        };
       }
-      await loadInitialData(); // 상태 새로고침
+      
+      setDualModelResults(results);
+      await loadInitialData();
     } catch (error) {
-      setError(error instanceof Error ? error.message : '모델 비교 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  const handleTrainModel = async (modelCode: string) => {
-    setLoading(`train-${modelCode}`);
-    setError(null);
-
-    try {
-      if (modelType === 'both') {
-        // Base-up 모델 학습
-        await apiClient.setupModeling('wage_increase_bu_sbl');
-        const baseupResult = await apiClient.trainModel(modelCode, false);
-        
-        // Performance 모델 학습
-        await apiClient.setupModeling('wage_increase_mi_sbl');
-        const performanceResult = await apiClient.trainModel(modelCode, false);
-        
-        setTrainingResult({ baseup: baseupResult, performance: performanceResult });
-      } else {
-        const result = await apiClient.trainModel(modelCode, true);
-        setTrainingResult(result);
-      }
-      await loadInitialData(); // 상태 새로고침
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '모델 학습 중 오류가 발생했습니다.');
+      setError(error instanceof Error ? error.message : '듀얼 모델 처리 중 오류가 발생했습니다.');
     } finally {
       setLoading(null);
     }
@@ -161,10 +110,8 @@ export const Modeling: React.FC = () => {
 
     try {
       await apiClient.clearModels();
-      setSetupResult(null);
-      setComparisonResult(null);
-      setTrainingResult(null);
-      await loadInitialData(); // 상태 새로고침
+      setDualModelResults({});
+      await loadInitialData();
     } catch (error) {
       setError(error instanceof Error ? error.message : '모델 초기화 중 오류가 발생했습니다.');
     } finally {
@@ -200,18 +147,6 @@ export const Modeling: React.FC = () => {
       );
     }
 
-    if (status.environment_setup && status.model_trained) {
-      return (
-        <Alert variant="success">
-          <CheckCircle className="h-4 w-4" />
-          <AlertTitle>모델링 완료</AlertTitle>
-          <AlertDescription>
-            {status.current_model_type} 모델이 성공적으로 학습되었습니다.
-          </AlertDescription>
-        </Alert>
-      );
-    }
-
     return null;
   };
 
@@ -222,12 +157,6 @@ export const Modeling: React.FC = () => {
           <h1 className="text-3xl font-bold text-foreground">모델링</h1>
           <p className="text-muted-foreground">PyCaret을 사용한 머신러닝 모델 학습</p>
         </div>
-        {status?.environment_setup && (
-          <Button variant="outline" onClick={handleClearModels} disabled={loading === 'clear'}>
-            <Trash2 className="mr-2 h-4 w-4" />
-            {loading === 'clear' ? '초기화 중...' : '모델 초기화'}
-          </Button>
-        )}
       </div>
 
       {error && (
@@ -280,222 +209,61 @@ export const Modeling: React.FC = () => {
         </Card>
       )}
 
-      {/* 메인 액션 카드들 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* 환경 설정 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Settings className="mr-2 h-5 w-5" />
-              환경 설정
-              {status?.environment_setup && <CheckCircle className="ml-auto h-5 w-5 text-green-600" />}
-            </CardTitle>
-            <CardDescription>
-              타겟 변수 선택 및 PyCaret 환경 구성
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!status?.environment_setup ? (
-              <>
-                <div>
-                  <label className="text-sm font-medium">모델 타입 선택</label>
-                  <div className="grid grid-cols-3 gap-2 mt-2">
-                    <button
-                      onClick={() => setModelType('baseup')}
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        modelType === 'baseup'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      Base-up만
-                    </button>
-                    <button
-                      onClick={() => setModelType('performance')}
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        modelType === 'performance'
-                          ? 'bg-green-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      성과급만
-                    </button>
-                    <button
-                      onClick={() => setModelType('both')}
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        modelType === 'both'
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      둘 다 자동
-                    </button>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {modelType === 'baseup' && 'Base-up 인상률 예측 모델 (wage_increase_bu_sbl)'}
-                    {modelType === 'performance' && '성과급 인상률 예측 모델 (wage_increase_mi_sbl)'}
-                    {modelType === 'both' && '🎯 Base-up + 성과급 모델을 자동으로 훈련합니다'}
-                  </p>
-                </div>
-                <Button 
-                  className="w-full" 
-                  onClick={handleSetupModeling}
-                  disabled={loading === 'setup' || !status?.data_loaded}
-                >
-                  {loading === 'setup' ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      설정 중...
-                    </>
-                  ) : (
-                    '환경 설정 시작'
-                  )}
-                </Button>
-              </>
-            ) : (
-              <div className="text-center">
-                <CheckCircle className="mx-auto h-8 w-8 text-green-600 mb-2" />
-                <p className="text-sm text-muted-foreground">환경 설정 완료</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  타겟: {setupResult?.setup_request?.target_column}
-                </p>
-              </div>
+      {/* 메인 액션 카드 - 듀얼 모델 자동 처리 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Brain className="mr-2 h-5 w-5" />
+            듀얼 모델 자동 학습
+            {dualModelResults.baseup && dualModelResults.performance && (
+              <CheckCircle className="ml-auto h-5 w-5 text-green-600" />
             )}
-          </CardContent>
-        </Card>
-
-        {/* 모델 비교 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <BarChart className="mr-2 h-5 w-5" />
-              모델 비교
-              {status?.models_compared && <CheckCircle className="ml-auto h-5 w-5 text-green-600" />}
-            </CardTitle>
-            <CardDescription>
-              여러 모델의 성능을 자동으로 비교
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+          </CardTitle>
+          <CardDescription>
+            Base-up과 성과급 모델을 자동으로 비교하고 최적 모델을 선정하여 학습합니다
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!dualModelResults.baseup && !dualModelResults.performance ? (
             <Button 
-              variant="outline" 
-              className="w-full"
-              onClick={handleCompareModels}
-              disabled={loading === 'compare' || !status?.environment_setup}
+              className="w-full" 
+              size="lg"
+              onClick={handleCompareAndTrainBothModels}
+              disabled={loading === 'dual-process' || !status?.data_loaded}
             >
-              {loading === 'compare' ? (
+              {loading === 'dual-process' ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  비교 중...
+                  자동 처리 중...
                 </>
               ) : (
-                '모델 비교 시작'
+                '🚀 듀얼 모델 자동 학습 시작'
               )}
             </Button>
-            {comparisonResult && (
-              <div className="mt-4 p-3 bg-background border rounded-lg">
-                <p className="text-sm">
-                  <strong>추천 모델:</strong> {comparisonResult.recommended_model_type}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {comparisonResult.models_compared}개 모델 비교 완료
+          ) : (
+            <div className="space-y-3">
+              <div className="text-center p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
+                <CheckCircle className="mx-auto h-12 w-12 text-green-600 mb-2" />
+                <p className="text-sm font-semibold text-green-900 dark:text-green-100">
+                  두 모델 모두 학습 완료!
                 </p>
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 모델 학습 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Play className="mr-2 h-5 w-5" />
-              모델 학습
-              {status?.model_trained && <CheckCircle className="ml-auto h-5 w-5 text-green-600" />}
-            </CardTitle>
-            <CardDescription>
-              선택된 모델 학습 및 하이퍼파라미터 튜닝
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!status?.model_trained ? (
               <Button 
-                variant="outline" 
-                className="w-full"
-                onClick={() => handleTrainModel('lr')}
-                disabled={loading?.startsWith('train') || !status?.environment_setup}
+                variant="outline"
+                className="w-full" 
+                onClick={handleClearModels}
+                disabled={loading === 'clear'}
               >
-                {loading?.startsWith('train') ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    학습 중...
-                  </>
-                ) : (
-                  '자동 모델 학습'
-                )}
+                <Trash2 className="mr-2 h-4 w-4" />
+                {loading === 'clear' ? '초기화 중...' : '모델 초기화'}
               </Button>
-            ) : (
-              <div className="text-center">
-                <Brain className="mx-auto h-8 w-8 text-blue-600 mb-2" />
-                <p className="text-sm text-muted-foreground">모델 학습 완료</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {status.current_model_type}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 사용 가능한 모델 목록 */}
-      {availableModels.length > 0 && status?.environment_setup && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Target className="mr-2 h-5 w-5" />
-              사용 가능한 모델
-            </CardTitle>
-            <CardDescription>
-              현재 데이터에 최적화된 모델 목록
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {availableModels.map((model) => (
-                <div key={model.code} className="border border-border rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-sm">{model.name}</h4>
-                    {model.recommended && (
-                      <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
-                        추천
-                      </span>
-                    )}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => handleTrainModel(model.code)}
-                    disabled={loading === `train-${model.code}`}
-                  >
-                    {loading === `train-${model.code}` ? (
-                      <>
-                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                        학습 중...
-                      </>
-                    ) : (
-                      '학습'
-                    )}
-                  </Button>
-                </div>
-              ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
-      {/* 결과 요약 */}
-      {(setupResult || comparisonResult || trainingResult) && (
+      {/* 결과 표시 */}
+      {(dualModelResults.baseup || dualModelResults.performance) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center">
@@ -504,49 +272,139 @@ export const Modeling: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {setupResult && (
-              <div className="p-3 rounded-lg border" style={{
+            {/* Base-up 모델 결과 */}
+            {dualModelResults.baseup && (
+              <div className="p-4 rounded-lg border-2" style={{
                 backgroundColor: 'rgb(59 130 246 / 0.15)',
-                borderColor: 'rgb(59 130 246 / 0.3)'
+                borderColor: 'rgb(59 130 246 / 0.5)'
               }}>
-                <h4 className="font-medium text-blue-900 dark:text-blue-100">환경 설정 완료</h4>
-                <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                  모델링 데이터: {setupResult.data_info?.final_shape?.[0]} × {setupResult.data_info?.final_shape?.[1]}
-                  {setupResult.data_info?.removed_target_missing && (
-                    <span className="text-xs block text-blue-600 dark:text-blue-400">
-                      (타겟 결측값 {setupResult.data_info.removed_target_missing}개 행 제외)
-                    </span>
-                  )}
-                </p>
-                <p className="text-sm text-blue-700 dark:text-blue-300">
-                  사용 가능한 모델: {setupResult.available_models?.join(', ')}
-                </p>
-              </div>
-            )}
-            
-            {comparisonResult && (
-              <div className="p-3 rounded-lg border" style={{
-                backgroundColor: 'rgb(34 197 94 / 0.15)',
-                borderColor: 'rgb(34 197 94 / 0.3)'
-              }}>
-                <h4 className="font-medium text-green-900 dark:text-green-100">모델 비교 완료</h4>
-                <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                  최고 성능: {comparisonResult.recommended_model_type}
-                </p>
-                <p className="text-sm text-green-700 dark:text-green-300">
-                  비교된 모델 수: {comparisonResult.models_compared}개
+                <h4 className="font-bold text-lg text-blue-900 dark:text-blue-100 mb-3">
+                  📊 Base-up 모델 (wage_increase_bu_sbl)
+                </h4>
+                <div className="bg-white/50 dark:bg-black/30 p-3 rounded-lg mb-3">
+                  <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                    선정된 최적 모델:
+                  </p>
+                  <p className="text-2xl font-bold text-blue-800 dark:text-blue-200 mt-1">
+                    {dualModelResults.baseup.selectedModel}
+                  </p>
+                </div>
+                {dualModelResults.baseup.metrics && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
+                      <p className="text-xs text-blue-700 dark:text-blue-300">MAE</p>
+                      <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
+                        {dualModelResults.baseup.metrics.MAE?.toFixed(4) || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
+                      <p className="text-xs text-blue-700 dark:text-blue-300">RMSE</p>
+                      <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
+                        {dualModelResults.baseup.metrics.RMSE?.toFixed(4) || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
+                      <p className="text-xs text-blue-700 dark:text-blue-300">R2 Score</p>
+                      <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
+                        {dualModelResults.baseup.metrics.R2?.toFixed(4) || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
+                      <p className="text-xs text-blue-700 dark:text-blue-300">MAPE</p>
+                      <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
+                        {dualModelResults.baseup.metrics.MAPE?.toFixed(2) || 'N/A'}%
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-3">
+                  총 {dualModelResults.baseup.comparison?.models_compared || 0}개 모델 비교 완료
                 </p>
               </div>
             )}
 
-            {trainingResult && (
-              <div className="p-3 rounded-lg border" style={{
-                backgroundColor: 'rgb(168 85 247 / 0.15)',
-                borderColor: 'rgb(168 85 247 / 0.3)'
+            {/* Performance 모델 결과 */}
+            {dualModelResults.performance && (
+              <div className="p-4 rounded-lg border-2" style={{
+                backgroundColor: 'rgb(34 197 94 / 0.15)',
+                borderColor: 'rgb(34 197 94 / 0.5)'
               }}>
-                <h4 className="font-medium text-purple-900 dark:text-purple-100">모델 학습 완료</h4>
-                <p className="text-sm text-purple-700 dark:text-purple-300 mt-1">
-                  학습된 모델: {trainingResult.model_type}
+                <h4 className="font-bold text-lg text-green-900 dark:text-green-100 mb-3">
+                  💰 성과급 모델 (wage_increase_mi_sbl)
+                </h4>
+                <div className="bg-white/50 dark:bg-black/30 p-3 rounded-lg mb-3">
+                  <p className="text-sm font-semibold text-green-900 dark:text-green-100">
+                    선정된 최적 모델:
+                  </p>
+                  <p className="text-2xl font-bold text-green-800 dark:text-green-200 mt-1">
+                    {dualModelResults.performance.selectedModel}
+                  </p>
+                </div>
+                {dualModelResults.performance.metrics && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
+                      <p className="text-xs text-green-700 dark:text-green-300">MAE</p>
+                      <p className="text-sm font-bold text-green-900 dark:text-green-100">
+                        {dualModelResults.performance.metrics.MAE?.toFixed(4) || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
+                      <p className="text-xs text-green-700 dark:text-green-300">RMSE</p>
+                      <p className="text-sm font-bold text-green-900 dark:text-green-100">
+                        {dualModelResults.performance.metrics.RMSE?.toFixed(4) || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
+                      <p className="text-xs text-green-700 dark:text-green-300">R2 Score</p>
+                      <p className="text-sm font-bold text-green-900 dark:text-green-100">
+                        {dualModelResults.performance.metrics.R2?.toFixed(4) || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
+                      <p className="text-xs text-green-700 dark:text-green-300">MAPE</p>
+                      <p className="text-sm font-bold text-green-900 dark:text-green-100">
+                        {dualModelResults.performance.metrics.MAPE?.toFixed(2) || 'N/A'}%
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-green-600 dark:text-green-400 mt-3">
+                  총 {dualModelResults.performance.comparison?.models_compared || 0}개 모델 비교 완료
+                </p>
+              </div>
+            )}
+
+            {/* 종합 결과 */}
+            {dualModelResults.baseup && dualModelResults.performance && (
+              <div className="p-4 rounded-lg border-2" style={{
+                backgroundColor: 'rgb(168 85 247 / 0.15)',
+                borderColor: 'rgb(168 85 247 / 0.5)'
+              }}>
+                <h4 className="font-bold text-lg text-purple-900 dark:text-purple-100 mb-3">
+                  ✅ 최종 결과 요약
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white/50 dark:bg-black/30 p-3 rounded-lg">
+                    <p className="text-xs text-purple-700 dark:text-purple-300 mb-1">Base-up 모델</p>
+                    <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
+                      {dualModelResults.baseup.selectedModel}
+                    </p>
+                    <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                      MAE: {dualModelResults.baseup.metrics?.MAE?.toFixed(4) || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="bg-white/50 dark:bg-black/30 p-3 rounded-lg">
+                    <p className="text-xs text-purple-700 dark:text-purple-300 mb-1">성과급 모델</p>
+                    <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
+                      {dualModelResults.performance.selectedModel}
+                    </p>
+                    <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                      MAE: {dualModelResults.performance.metrics?.MAE?.toFixed(4) || 'N/A'}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-sm text-purple-700 dark:text-purple-300 mt-3 text-center">
+                  💡 전체 인상률 = Base-up + 성과급
                 </p>
               </div>
             )}
