@@ -16,7 +16,7 @@ class DataService:
         self.data_dir.mkdir(exist_ok=True)
         self.pickle_file = self.data_dir / "master_data.pkl"
         # 원본 데이터를 우선 사용 (문자열 값 처리를 PyCaret에 맡김)
-        self.master_excel_file = "wage_increase.xlsx"
+        self.master_excel_file = "../SambaWage_250825.xlsx"
         self.current_data: Optional[pd.DataFrame] = None
         self.data_info: Optional[Dict[str, Any]] = None
         
@@ -89,7 +89,38 @@ class DataService:
         try:
             # 파일 확장자에 따라 적절한 로더 사용
             if file_path.endswith(('.xlsx', '.xls')):
-                df = pd.read_excel(file_path)
+                # Excel 파일 읽기
+                # SambaWage_250825.xlsx의 경우: 첫 번째 행은 한글 헤더, 두 번째 행은 영문 헤더
+                if 'SambaWage' in file_path:
+                    df = pd.read_excel(file_path, header=1)  # 두 번째 행(영문)을 헤더로 사용
+                else:
+                    df = pd.read_excel(file_path, header=0)  # 일반 파일은 첫 번째 행을 헤더로
+                
+                # 만약 첫 번째 데이터 행이 영문 헤더가 아닌 실제 데이터인지 확인
+                # (year 컬럼이 있고 첫 번째 값이 숫자여야 함)
+                if 'year' in df.columns:
+                    # year 컬럼의 첫 번째 값이 문자열인지 확인
+                    first_year = df.iloc[0]['year'] if len(df) > 0 else None
+                    if first_year is not None:
+                        try:
+                            # 숫자로 변환 시도
+                            float(first_year)
+                        except (ValueError, TypeError):
+                            # 첫 번째 행이 데이터가 아닌 경우 (예: 또 다른 헤더)
+                            # 이 행을 제거
+                            df = df.iloc[1:].reset_index(drop=True)
+                            logging.info("Removed additional header row from Excel data")
+                
+                # 데이터 타입 변환 (숫자 컬럼을 float로)
+                for col in df.columns:
+                    if col != 'year':  # year 제외한 모든 컬럼
+                        try:
+                            df[col] = pd.to_numeric(df[col], errors='coerce')
+                        except:
+                            pass
+                
+                logging.info(f"Loaded Excel file with shape: {df.shape}, columns: {list(df.columns)[:5]}...")
+                
             elif file_path.endswith('.csv'):
                 df = pd.read_csv(file_path)
             else:

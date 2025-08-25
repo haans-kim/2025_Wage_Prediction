@@ -25,9 +25,12 @@ class ModelingService:
     def __init__(self):
         self.current_experiment = None
         self.current_model = None
+        self.baseup_model = None  # Base-up 전용 모델
+        self.performance_model = None  # 성과급 전용 모델
         self.model_results = None
         self.is_setup_complete = False
         self.is_model_trained_individually = False  # 개별 모델 학습 여부
+        self.current_target = None  # 현재 타겟 컬럼
         
         # 데이터 크기에 따른 모델 선택
         self.small_data_models = ['lr', 'ridge', 'lasso', 'en', 'dt']
@@ -218,6 +221,7 @@ class ModelingService:
             
             self.current_experiment = exp
             self.is_setup_complete = True
+            self.current_target = target_column  # 현재 타겟 저장
             
         except Exception as e:
             raise RuntimeError(f"PyCaret setup failed: {str(e)}")
@@ -341,6 +345,14 @@ class ModelingService:
             
             self.current_model = final_model
             self.is_model_trained_individually = True  # 개별 모델 학습 완료
+            
+            # 타겟에 따라 모델 저장
+            if self.current_target == 'wage_increase_bu_sbl':
+                self.baseup_model = final_model
+                logging.info("Base-up model stored")
+            elif self.current_target == 'wage_increase_mi_sbl':
+                self.performance_model = final_model
+                logging.info("Performance model stored")
             
         except Exception as e:
             raise RuntimeError(f"Model training failed: {str(e)}")

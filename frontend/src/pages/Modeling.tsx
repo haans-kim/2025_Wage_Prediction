@@ -38,6 +38,7 @@ export const Modeling: React.FC = () => {
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [recommendations, setRecommendations] = useState<any>(null);
   const [targetColumn, setTargetColumn] = useState<string>('');
+  const [modelType, setModelType] = useState<'baseup' | 'performance' | 'both'>('both');
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,17 +78,21 @@ export const Modeling: React.FC = () => {
   };
 
   const handleSetupModeling = async () => {
-    if (!targetColumn) {
-      setError('타겟 컬럼을 선택해주세요.');
-      return;
-    }
-
     setLoading('setup');
     setError(null);
 
     try {
-      const result = await apiClient.setupModeling(targetColumn);
-      setSetupResult(result);
+      if (modelType === 'both') {
+        // 두 모델을 순차적으로 설정
+        const baseupResult = await apiClient.setupModeling('wage_increase_bu_sbl');
+        const performanceResult = await apiClient.setupModeling('wage_increase_mi_sbl');
+        setSetupResult({ baseup: baseupResult, performance: performanceResult });
+      } else {
+        // 단일 모델 설정
+        const selectedTarget = modelType === 'baseup' ? 'wage_increase_bu_sbl' : 'wage_increase_mi_sbl';
+        const result = await apiClient.setupModeling(selectedTarget);
+        setSetupResult(result);
+      }
       await loadInitialData(); // 상태 새로고침
     } catch (error) {
       setError(error instanceof Error ? error.message : '환경 설정 중 오류가 발생했습니다.');
@@ -101,8 +106,20 @@ export const Modeling: React.FC = () => {
     setError(null);
 
     try {
-      const result = await apiClient.compareModels(3);
-      setComparisonResult(result);
+      if (modelType === 'both') {
+        // Base-up 모델 환경 설정 및 비교
+        await apiClient.setupModeling('wage_increase_bu_sbl');
+        const baseupComparison = await apiClient.compareModels(3);
+        
+        // Performance 모델 환경 설정 및 비교
+        await apiClient.setupModeling('wage_increase_mi_sbl');
+        const performanceComparison = await apiClient.compareModels(3);
+        
+        setComparisonResult({ baseup: baseupComparison, performance: performanceComparison });
+      } else {
+        const result = await apiClient.compareModels(3);
+        setComparisonResult(result);
+      }
       await loadInitialData(); // 상태 새로고침
     } catch (error) {
       setError(error instanceof Error ? error.message : '모델 비교 중 오류가 발생했습니다.');
@@ -116,8 +133,20 @@ export const Modeling: React.FC = () => {
     setError(null);
 
     try {
-      const result = await apiClient.trainModel(modelCode, true);
-      setTrainingResult(result);
+      if (modelType === 'both') {
+        // Base-up 모델 학습
+        await apiClient.setupModeling('wage_increase_bu_sbl');
+        const baseupResult = await apiClient.trainModel(modelCode, false);
+        
+        // Performance 모델 학습
+        await apiClient.setupModeling('wage_increase_mi_sbl');
+        const performanceResult = await apiClient.trainModel(modelCode, false);
+        
+        setTrainingResult({ baseup: baseupResult, performance: performanceResult });
+      } else {
+        const result = await apiClient.trainModel(modelCode, true);
+        setTrainingResult(result);
+      }
       await loadInitialData(); // 상태 새로고침
     } catch (error) {
       setError(error instanceof Error ? error.message : '모델 학습 중 오류가 발생했습니다.');
@@ -269,23 +298,49 @@ export const Modeling: React.FC = () => {
             {!status?.environment_setup ? (
               <>
                 <div>
-                  <label className="text-sm font-medium">타겟 컬럼 선택</label>
-                  <select 
-                    value={targetColumn} 
-                    onChange={(e) => setTargetColumn(e.target.value)}
-                    className="w-full mt-1 p-2 border border-border rounded-md bg-background"
-                    disabled={!availableColumns.length}
-                  >
-                    <option value="">선택하세요</option>
-                    {availableColumns.map(col => (
-                      <option key={col} value={col}>{col}</option>
-                    ))}
-                  </select>
+                  <label className="text-sm font-medium">모델 타입 선택</label>
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <button
+                      onClick={() => setModelType('baseup')}
+                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                        modelType === 'baseup'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Base-up만
+                    </button>
+                    <button
+                      onClick={() => setModelType('performance')}
+                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                        modelType === 'performance'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      성과급만
+                    </button>
+                    <button
+                      onClick={() => setModelType('both')}
+                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                        modelType === 'both'
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      둘 다 자동
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {modelType === 'baseup' && 'Base-up 인상률 예측 모델 (wage_increase_bu_sbl)'}
+                    {modelType === 'performance' && '성과급 인상률 예측 모델 (wage_increase_mi_sbl)'}
+                    {modelType === 'both' && '🎯 Base-up + 성과급 모델을 자동으로 훈련합니다'}
+                  </p>
                 </div>
                 <Button 
                   className="w-full" 
                   onClick={handleSetupModeling}
-                  disabled={loading === 'setup' || !targetColumn || !status?.data_loaded}
+                  disabled={loading === 'setup' || !status?.data_loaded}
                 >
                   {loading === 'setup' ? (
                     <>

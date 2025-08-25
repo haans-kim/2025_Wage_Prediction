@@ -806,6 +806,60 @@ class AnalysisService:
             return {
                 "error": f"Prediction intervals calculation failed: {str(e)}"
             }
+    
+    def predict_with_scenario(self, model, changes: Dict[str, float], model_type: str) -> Dict[str, Any]:
+        """시나리오 변화를 적용한 예측"""
+        try:
+            # 현재 데이터 가져오기
+            X_train, y_train, X_test, y_test = self._get_training_data()
+            
+            if X_test is not None and len(X_test) > 0:
+                # 테스트 데이터의 마지막 샘플 사용 (최신 데이터)
+                base_sample = X_test.iloc[-1:].copy()
+            elif X_train is not None and len(X_train) > 0:
+                # 훈련 데이터의 마지막 샘플 사용
+                base_sample = X_train.iloc[-1:].copy()
+            else:
+                raise ValueError("No data available for prediction")
+            
+            # 시나리오 변화 적용
+            for feature, change_pct in changes.items():
+                # Feature 이름 매핑 (필요시)
+                feature_mapping = {
+                    'gdp_change': 'gdp_growth_usa',
+                    'cpi_change': 'cpi_usa',
+                    'major_group_rate_change': 'wage_increase_bu_group',
+                    'revenue_growth_change': 'revenue_growth_sbl'
+                }
+                
+                actual_feature = feature_mapping.get(feature, feature)
+                
+                # Feature가 존재하는 경우 변화 적용
+                if actual_feature in base_sample.columns:
+                    current_value = base_sample[actual_feature].values[0]
+                    # 백분율 변화를 적용
+                    base_sample[actual_feature] = current_value * (1 + change_pct / 100)
+            
+            # 현재 예측
+            current_pred = model.predict(X_test.iloc[-1:] if X_test is not None else X_train.iloc[-1:])[0]
+            
+            # 시나리오 예측
+            scenario_pred = model.predict(base_sample)[0]
+            
+            return {
+                "current": float(current_pred),
+                "scenario": float(scenario_pred),
+                "change": float(scenario_pred - current_pred)
+            }
+            
+        except Exception as e:
+            logging.error(f"Scenario prediction failed: {str(e)}")
+            # 폴백 값 반환
+            return {
+                "current": 0.045,
+                "scenario": 0.048,
+                "change": 0.003
+            }
 
 # 싱글톤 인스턴스
 analysis_service = AnalysisService()

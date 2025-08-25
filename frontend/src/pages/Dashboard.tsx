@@ -32,6 +32,8 @@ import {
   Sliders
 } from 'lucide-react';
 import { apiClient } from '../lib/api';
+import { ShapAnalysis } from '../components/ShapAnalysis';
+import { WhatIfScenario } from '../components/WhatIfScenario';
 
 // Chart.js 구성 요소 등록
 ChartJS.register(
@@ -824,6 +826,12 @@ export const Dashboard: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* What-If 시나리오 분석 섹션 */}
+      <WhatIfScenario />
+
+      {/* SHAP 분석 섹션 */}
+      <ShapAnalysis modelType="both" />
     </div>
   );
 };
