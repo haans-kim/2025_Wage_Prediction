@@ -261,9 +261,10 @@ class ModelingService:
             sys.stderr = io.StringIO()
             
             # 모델 비교 실행
+            # 작은 데이터셋에서는 MAE가 더 신뢰할 수 있는 지표
             best_models = compare_models(
                 include=models_to_use,
-                sort='R2',
+                sort='MAE',  # MAE가 낮을수록 좋음 (R2는 음수가 나올 수 있음)
                 n_select=min(n_select, len(models_to_use)),
                 verbose=False,
                 fold=3  # 빠른 비교를 위해 fold 수 제한

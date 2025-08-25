@@ -281,45 +281,61 @@ export const Modeling: React.FC = () => {
                 <h4 className="font-bold text-lg text-blue-900 dark:text-blue-100 mb-3">
                   📊 Base-up 모델 (wage_increase_bu_sbl)
                 </h4>
-                <div className="bg-white/50 dark:bg-black/30 p-3 rounded-lg mb-3">
+                
+                {/* 모델 비교 테이블 */}
+                {dualModelResults.baseup.comparison?.comparison_results && (
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                      모델 비교 결과:
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-blue-200/30 dark:bg-blue-800/30">
+                            <th className="px-2 py-1 text-left">순위</th>
+                            <th className="px-2 py-1 text-left">모델</th>
+                            <th className="px-2 py-1 text-right">MAE</th>
+                            <th className="px-2 py-1 text-right">RMSE</th>
+                            <th className="px-2 py-1 text-right">R2</th>
+                            <th className="px-2 py-1 text-right">MAPE</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dualModelResults.baseup.comparison.comparison_results.slice(0, 5).map((model: any, idx: number) => (
+                            <tr key={idx} className={idx === 0 ? 'bg-blue-300/20 dark:bg-blue-700/20 font-bold' : 'bg-white/30 dark:bg-black/20'}>
+                              <td className="px-2 py-1">{idx + 1}</td>
+                              <td className="px-2 py-1">
+                                {model.Model}
+                                {idx === 0 && ' 🏆'}
+                              </td>
+                              <td className="px-2 py-1 text-right">{model.MAE?.toFixed(4) || 'N/A'}</td>
+                              <td className="px-2 py-1 text-right">{model.RMSE?.toFixed(4) || 'N/A'}</td>
+                              <td className="px-2 py-1 text-right">{model.R2?.toFixed(4) || 'N/A'}</td>
+                              <td className="px-2 py-1 text-right">{model.MAPE?.toFixed(2) || 'N/A'}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="bg-white/50 dark:bg-black/30 p-3 rounded-lg">
                   <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">
                     선정된 최적 모델:
                   </p>
                   <p className="text-2xl font-bold text-blue-800 dark:text-blue-200 mt-1">
                     {dualModelResults.baseup.selectedModel}
                   </p>
+                  {dualModelResults.baseup.metrics && (
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <p className="text-xs">MAE: {dualModelResults.baseup.metrics.MAE?.toFixed(4) || 'N/A'}</p>
+                      <p className="text-xs">RMSE: {dualModelResults.baseup.metrics.RMSE?.toFixed(4) || 'N/A'}</p>
+                      <p className="text-xs">R2: {dualModelResults.baseup.metrics.R2?.toFixed(4) || 'N/A'}</p>
+                      <p className="text-xs">MAPE: {dualModelResults.baseup.metrics.MAPE?.toFixed(2) || 'N/A'}%</p>
+                    </div>
+                  )}
                 </div>
-                {dualModelResults.baseup.metrics && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
-                      <p className="text-xs text-blue-700 dark:text-blue-300">MAE</p>
-                      <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
-                        {dualModelResults.baseup.metrics.MAE?.toFixed(4) || 'N/A'}
-                      </p>
-                    </div>
-                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
-                      <p className="text-xs text-blue-700 dark:text-blue-300">RMSE</p>
-                      <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
-                        {dualModelResults.baseup.metrics.RMSE?.toFixed(4) || 'N/A'}
-                      </p>
-                    </div>
-                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
-                      <p className="text-xs text-blue-700 dark:text-blue-300">R2 Score</p>
-                      <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
-                        {dualModelResults.baseup.metrics.R2?.toFixed(4) || 'N/A'}
-                      </p>
-                    </div>
-                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
-                      <p className="text-xs text-blue-700 dark:text-blue-300">MAPE</p>
-                      <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
-                        {dualModelResults.baseup.metrics.MAPE?.toFixed(2) || 'N/A'}%
-                      </p>
-                    </div>
-                  </div>
-                )}
-                <p className="text-xs text-blue-600 dark:text-blue-400 mt-3">
-                  총 {dualModelResults.baseup.comparison?.models_compared || 0}개 모델 비교 완료
-                </p>
               </div>
             )}
 
@@ -332,45 +348,61 @@ export const Modeling: React.FC = () => {
                 <h4 className="font-bold text-lg text-green-900 dark:text-green-100 mb-3">
                   💰 성과급 모델 (wage_increase_mi_sbl)
                 </h4>
-                <div className="bg-white/50 dark:bg-black/30 p-3 rounded-lg mb-3">
+                
+                {/* 모델 비교 테이블 */}
+                {dualModelResults.performance.comparison?.comparison_results && (
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-green-900 dark:text-green-100 mb-2">
+                      모델 비교 결과:
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-green-200/30 dark:bg-green-800/30">
+                            <th className="px-2 py-1 text-left">순위</th>
+                            <th className="px-2 py-1 text-left">모델</th>
+                            <th className="px-2 py-1 text-right">MAE</th>
+                            <th className="px-2 py-1 text-right">RMSE</th>
+                            <th className="px-2 py-1 text-right">R2</th>
+                            <th className="px-2 py-1 text-right">MAPE</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dualModelResults.performance.comparison.comparison_results.slice(0, 5).map((model: any, idx: number) => (
+                            <tr key={idx} className={idx === 0 ? 'bg-green-300/20 dark:bg-green-700/20 font-bold' : 'bg-white/30 dark:bg-black/20'}>
+                              <td className="px-2 py-1">{idx + 1}</td>
+                              <td className="px-2 py-1">
+                                {model.Model}
+                                {idx === 0 && ' 🏆'}
+                              </td>
+                              <td className="px-2 py-1 text-right">{model.MAE?.toFixed(4) || 'N/A'}</td>
+                              <td className="px-2 py-1 text-right">{model.RMSE?.toFixed(4) || 'N/A'}</td>
+                              <td className="px-2 py-1 text-right">{model.R2?.toFixed(4) || 'N/A'}</td>
+                              <td className="px-2 py-1 text-right">{model.MAPE?.toFixed(2) || 'N/A'}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="bg-white/50 dark:bg-black/30 p-3 rounded-lg">
                   <p className="text-sm font-semibold text-green-900 dark:text-green-100">
                     선정된 최적 모델:
                   </p>
                   <p className="text-2xl font-bold text-green-800 dark:text-green-200 mt-1">
                     {dualModelResults.performance.selectedModel}
                   </p>
+                  {dualModelResults.performance.metrics && (
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <p className="text-xs">MAE: {dualModelResults.performance.metrics.MAE?.toFixed(4) || 'N/A'}</p>
+                      <p className="text-xs">RMSE: {dualModelResults.performance.metrics.RMSE?.toFixed(4) || 'N/A'}</p>
+                      <p className="text-xs">R2: {dualModelResults.performance.metrics.R2?.toFixed(4) || 'N/A'}</p>
+                      <p className="text-xs">MAPE: {dualModelResults.performance.metrics.MAPE?.toFixed(2) || 'N/A'}%</p>
+                    </div>
+                  )}
                 </div>
-                {dualModelResults.performance.metrics && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
-                      <p className="text-xs text-green-700 dark:text-green-300">MAE</p>
-                      <p className="text-sm font-bold text-green-900 dark:text-green-100">
-                        {dualModelResults.performance.metrics.MAE?.toFixed(4) || 'N/A'}
-                      </p>
-                    </div>
-                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
-                      <p className="text-xs text-green-700 dark:text-green-300">RMSE</p>
-                      <p className="text-sm font-bold text-green-900 dark:text-green-100">
-                        {dualModelResults.performance.metrics.RMSE?.toFixed(4) || 'N/A'}
-                      </p>
-                    </div>
-                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
-                      <p className="text-xs text-green-700 dark:text-green-300">R2 Score</p>
-                      <p className="text-sm font-bold text-green-900 dark:text-green-100">
-                        {dualModelResults.performance.metrics.R2?.toFixed(4) || 'N/A'}
-                      </p>
-                    </div>
-                    <div className="bg-white/50 dark:bg-black/30 p-2 rounded">
-                      <p className="text-xs text-green-700 dark:text-green-300">MAPE</p>
-                      <p className="text-sm font-bold text-green-900 dark:text-green-100">
-                        {dualModelResults.performance.metrics.MAPE?.toFixed(2) || 'N/A'}%
-                      </p>
-                    </div>
-                  </div>
-                )}
-                <p className="text-xs text-green-600 dark:text-green-400 mt-3">
-                  총 {dualModelResults.performance.comparison?.models_compared || 0}개 모델 비교 완료
-                </p>
               </div>
             )}
 
