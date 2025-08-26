@@ -379,11 +379,22 @@ async def predict_with_adjustments(request: FeatureAdjustmentRequest) -> Dict[st
             old_stdout = sys.stdout
             sys.stdout = io.StringIO()
             
-            # 타겟 컬럼 제거 (있는 경우)
+            # 더 상세한 디버깅 정보
+            sys.stdout = old_stdout  # 일시적으로 stdout 복원
+            print(f"[DEBUG] Target: {request.target}")
+            print(f"[DEBUG] Model type: {type(model)}")
+            print(f"[DEBUG] Before processing - Columns: {list(baseline_data.columns)}")
+            print(f"[DEBUG] Data shape: {baseline_data.shape}")
+            
+            # PyCaret 모델이 기대하는 모든 컬럼 유지, 타겟 컬럼만 0으로 설정
             target_cols = ['wage_increase_bu_sbl', 'wage_increase_mi_sbl']
             for col in target_cols:
                 if col in baseline_data.columns:
-                    baseline_data = baseline_data.drop(columns=[col])
+                    baseline_data[col] = 0  # 타겟 값을 0으로 설정 (예측에 영향 없음)
+            
+            print(f"[DEBUG] After setting targets to 0 - Data shape: {baseline_data.shape}")
+            
+            sys.stdout = io.StringIO()  # 다시 캡처 모드로
             
             predictions = predict_model(model, data=baseline_data, verbose=False)
             sys.stdout = old_stdout
@@ -399,9 +410,10 @@ async def predict_with_adjustments(request: FeatureAdjustmentRequest) -> Dict[st
             
             # Baseline 예측 (조정 전)
             baseline_original = data_service.current_data.iloc[-1:].copy()
+            # PyCaret 모델이 기대하는 모든 컬럼 유지, 타겟 컬럼만 0으로 설정
             for col in target_cols:
                 if col in baseline_original.columns:
-                    baseline_original = baseline_original.drop(columns=[col])
+                    baseline_original[col] = 0
             
             sys.stdout = io.StringIO()
             baseline_predictions = predict_model(model, data=baseline_original, verbose=False)

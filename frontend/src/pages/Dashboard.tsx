@@ -388,7 +388,9 @@ export const Dashboard: React.FC = () => {
           label: 'Base-up',
           data: baseupData.map((val, idx) => {
             // Base-up 값을 성과급과 총 인상률 사이에 위치시키기 위한 가상 y값
-            return (performanceData[idx] + totalData[idx]) / 2;
+            const perfValue = performanceData[idx] || 0;
+            const totalValue = totalData[idx] || 0;
+            return (perfValue + totalValue) / 2;
           }),
           borderColor: 'transparent', // 라인 숨김
           backgroundColor: 'transparent', // 배경 숨김
@@ -407,8 +409,11 @@ export const Dashboard: React.FC = () => {
               size: 10
             },
             formatter: (value: number, context: any) => {
-              // 실제 Base-up 값을 표시
-              return baseupData[context.dataIndex].toFixed(1);
+              // 실제 Base-up 값을 표시 (안전한 접근)
+              if (context && typeof context.dataIndex === 'number' && baseupData[context.dataIndex] !== undefined) {
+                return baseupData[context.dataIndex].toFixed(1);
+              }
+              return '';
             },
           }
         }
