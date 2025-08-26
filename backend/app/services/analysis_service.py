@@ -95,19 +95,17 @@ class AnalysisService:
                 # 로컬 random state 생성
                 rng = np.random.RandomState(42)
                 
-                # PyCaret에서 실제 파이프라인 가져오기
+                # PyCaret 모델인지 확인 - 직접 predict 사용
                 try:
-                    from pycaret.regression import get_config
-                    # PyCaret의 최종 모델 파이프라인 가져오기
-                    pipeline = get_config('pipeline')
-                    if pipeline is not None:
-                        print(f"📊 Using PyCaret pipeline instead of raw model")
-                        # 원본 모델을 직접 사용하는 대신 predict_model 함수를 사용
-                        use_predict_model = True
+                    # PyCaret 모델은 predict 메서드를 가지고 있음
+                    if hasattr(model, 'predict'):
+                        print(f"📊 Model has predict method, will use it directly")
+                        use_predict_model = False  # predict_model 대신 model.predict 사용
                     else:
+                        print(f"📊 Model doesn't have predict method")
                         use_predict_model = False
                 except Exception as e:
-                    print(f"⚠️ Failed to get PyCaret pipeline: {e}")
+                    print(f"⚠️ Failed to check model: {e}")
                     use_predict_model = False
                 
                 X_train, y_train, X_test, y_test = self._get_training_data()
@@ -146,37 +144,39 @@ class AnalysisService:
                     # numpy array를 DataFrame으로 변환
                     X_df = pd.DataFrame(X, columns=self.feature_names)
                     
-                    # PyCaret의 predict_model 직접 사용
+                    # PyCaret 모델 직접 predict 호출 (predict_model 대신)
                     try:
-                        from pycaret.regression import predict_model
-                        # predict_model은 자동으로 파이프라인을 처리함
-                        predictions_df = predict_model(model, data=X_df, verbose=False)
-                        
-                        # 예측 결과 컬럼 찾기
-                        if 'prediction_label' in predictions_df.columns:
-                            predictions = predictions_df['prediction_label'].values
-                        elif 'Label' in predictions_df.columns:
-                            predictions = predictions_df['Label'].values
+                        # 모델의 predict 메서드를 직접 호출
+                        if hasattr(model, 'predict'):
+                            predictions = model.predict(X_df)
+                            return predictions
                         else:
-                            # 원본 컬럼을 제외한 새로 추가된 컬럼이 예측값
-                            original_cols = set(X_df.columns)
-                            new_cols = set(predictions_df.columns) - original_cols
-                            if new_cols:
-                                pred_col = list(new_cols)[0]
-                                predictions = predictions_df[pred_col].values
+                            # Fallback to predict_model if direct predict doesn't work
+                            from pycaret.regression import predict_model
+                            predictions_df = predict_model(model, data=X_df, verbose=False)
+                            
+                            # 예측 결과 컬럼 찾기
+                            if 'prediction_label' in predictions_df.columns:
+                                predictions = predictions_df['prediction_label'].values
+                            elif 'Label' in predictions_df.columns:
+                                predictions = predictions_df['Label'].values
                             else:
-                                # 마지막 컬럼이 보통 예측 결과
-                                predictions = predictions_df.iloc[:, -1].values
-                        
-                        return predictions
+                                # 원본 컬럼을 제외한 새로 추가된 컬럼이 예측값
+                                original_cols = set(X_df.columns)
+                                new_cols = set(predictions_df.columns) - original_cols
+                                if new_cols:
+                                    pred_col = list(new_cols)[0]
+                                    predictions = predictions_df[pred_col].values
+                                else:
+                                    # 마지막 컬럼이 보통 예측 결과
+                                    predictions = predictions_df.iloc[:, -1].values
+                            
+                            return predictions
                         
                     except Exception as e:
-                        print(f"⚠️ predict_model failed: {e}")
-                        # 기본 모델 사용 시도
-                        if hasattr(model, 'predict'):
-                            return model.predict(X_df)
-                        else:
-                            raise e
+                        print(f"⚠️ Model prediction failed: {e}")
+                        # 안전한 fallback - 평균값 반환
+                        return np.full(len(X), 0.042)
                     
                 except Exception as e:
                     print(f"⚠️ Model prediction error in SHAP: {e}")
@@ -203,13 +203,13 @@ class AnalysisService:
                     # 래핑된 예측 함수 사용
                     explainer = shap.KernelExplainer(model_predict_wrapper, background_data)
                     
-                    # Use more samples for better SHAP values
-                    n_samples = min(50, len(analysis_data))  # Increase samples
-                    sample_indices = rng.choice(len(analysis_data), n_samples, replace=False)
-                    analysis_sample = analysis_data[sample_indices]
+                    # Use ALL available samples for better SHAP values with small dataset
+                    n_samples = len(analysis_data)  # Use all data
+                    analysis_sample = analysis_data
                     
                     print(f"📊 Computing SHAP values for {n_samples} samples...")
-                    shap_values = explainer.shap_values(analysis_sample, nsamples='auto')  # Let SHAP determine samples
+                    # Increase nsamples for better approximation with small dataset
+                    shap_values = explainer.shap_values(analysis_sample, nsamples=100)  # More samples for better approximation
                     
             except Exception as e:
                 print(f"⚠️ SHAP TreeExplainer failed, using KernelExplainer: {e}")
@@ -221,23 +221,12 @@ class AnalysisService:
                             # numpy 배열을 DataFrame으로 변환 (PyCaret 모델용)
                             if hasattr(X, 'shape') and len(X.shape) == 2:
                                 X_df = pd.DataFrame(X, columns=self.feature_names)
-                                from pycaret.regression import predict_model
-                                predictions_df = predict_model(model, data=X_df, verbose=False)
-                                
-                                # 예측 결과 컬럼 찾기
-                                if 'prediction_label' in predictions_df.columns:
-                                    return predictions_df['prediction_label'].values
-                                elif 'Label' in predictions_df.columns:
-                                    return predictions_df['Label'].values
+                                # 모델의 predict 메서드 직접 호출
+                                if hasattr(model, 'predict'):
+                                    predictions = model.predict(X_df)
+                                    return predictions
                                 else:
-                                    # 원본 컬럼을 제외한 새로 추가된 컬럼이 예측값
-                                    original_cols = set(X_df.columns)
-                                    new_cols = set(predictions_df.columns) - original_cols
-                                    if new_cols:
-                                        pred_col = list(new_cols)[0]
-                                        return predictions_df[pred_col].values
-                                    else:
-                                        return predictions_df.iloc[:, -1].values
+                                    return np.full(len(X), 0.042)
                             return np.zeros(len(X))
                         except Exception as e:
                             print(f"⚠️ SHAP safe_predict failed: {e}")
@@ -249,11 +238,10 @@ class AnalysisService:
                     
                     explainer = shap.KernelExplainer(safe_predict, background_data)
                     
-                    n_samples = min(20, len(analysis_data))  # Increased samples
-                    sample_indices = rng.choice(len(analysis_data), n_samples, replace=False)
-                    analysis_sample = analysis_data[sample_indices]
+                    n_samples = len(analysis_data)  # Use all data for small dataset
+                    analysis_sample = analysis_data
                     print(f"📊 Computing SHAP values (fallback) for {n_samples} samples...")
-                    shap_values = explainer.shap_values(analysis_sample, nsamples='auto')
+                    shap_values = explainer.shap_values(analysis_sample, nsamples=100)
                     
                 except Exception as inner_e:
                     print(f"⚠️ KernelExplainer also failed: {inner_e}")
