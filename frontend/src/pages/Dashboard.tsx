@@ -159,10 +159,10 @@ export const Dashboard: React.FC = () => {
 
   const loadFeatureImportance = async () => {
     try {
-      // 두 모델의 feature importance 가져오기
+      // 두 모델의 feature importance 가져오기 (SHAP 분석 사용)
       const [baseupRes, performanceRes] = await Promise.allSettled([
-        apiClient.get('/api/modeling/feature-importance/baseup', { params: { top_n: 10 } }),
-        apiClient.get('/api/modeling/feature-importance/performance', { params: { top_n: 10 } })
+        apiClient.get('/api/analysis/shap', { params: { target: 'wage_increase_bu_sbl', top_n: 10 } }),
+        apiClient.get('/api/analysis/shap', { params: { target: 'wage_increase_mi_sbl', top_n: 10 } })
       ]);
 
       const featureData: FeatureImportanceData = {
@@ -176,22 +176,36 @@ export const Dashboard: React.FC = () => {
         }
       };
 
-      if (baseupRes.status === 'fulfilled' && baseupRes.value.data.features) {
+      // SHAP 응답 형식에 맞게 처리
+      if (baseupRes.status === 'fulfilled' && baseupRes.value.data.feature_importance) {
+        // baseline values를 위한 기본값 설정
+        const baselineValues: { [key: string]: number } = {};
+        baseupRes.value.data.feature_importance.forEach((item: FeatureImportance) => {
+          // feature name에서 기본값 추론 (예: 0 또는 평균값)
+          baselineValues[item.feature] = 0;
+        });
+        
         featureData.baseup = {
-          features: baseupRes.value.data.features,
-          baseline_values: baseupRes.value.data.baseline_values || {}
+          features: baseupRes.value.data.feature_importance,
+          baseline_values: baselineValues
         };
         // 초기 동적 변수 설정
         setDynamicVariables(prev => ({
           ...prev,
-          ...baseupRes.value.data.baseline_values
+          ...baselineValues
         }));
       }
 
-      if (performanceRes.status === 'fulfilled' && performanceRes.value.data.features) {
+      if (performanceRes.status === 'fulfilled' && performanceRes.value.data.feature_importance) {
+        // baseline values를 위한 기본값 설정
+        const baselineValues: { [key: string]: number } = {};
+        performanceRes.value.data.feature_importance.forEach((item: FeatureImportance) => {
+          baselineValues[item.feature] = 0;
+        });
+        
         featureData.performance = {
-          features: performanceRes.value.data.features,
-          baseline_values: performanceRes.value.data.baseline_values || {}
+          features: performanceRes.value.data.feature_importance,
+          baseline_values: baselineValues
         };
       }
 

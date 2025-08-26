@@ -813,6 +813,7 @@ class ModelingService:
             
             # Base-up 모델 저장
             if self.baseup_model is not None:
+                print(f"   - Saving baseup feature importance: {len(self.baseup_feature_importance) if self.baseup_feature_importance else 0} features")
                 with open(self.baseup_model_path, 'wb') as f:
                     pickle.dump({
                         'model': self.baseup_model,
@@ -823,6 +824,7 @@ class ModelingService:
             
             # Performance 모델 저장
             if self.performance_model is not None:
+                print(f"   - Saving performance feature importance: {len(self.performance_feature_importance) if self.performance_feature_importance else 0} features")
                 with open(self.performance_model_path, 'wb') as f:
                     pickle.dump({
                         'model': self.performance_model,
@@ -868,6 +870,7 @@ class ModelingService:
                     self.baseup_feature_importance = data.get('feature_importance', [])
                     models_loaded.append('baseup')
                 print(f"✅ Base-up model loaded from {self.baseup_model_path}")
+                print(f"   - Feature importance: {len(self.baseup_feature_importance) if self.baseup_feature_importance else 0} features")
             
             # Performance 모델 로드
             if os.path.exists(self.performance_model_path):
@@ -877,6 +880,7 @@ class ModelingService:
                     self.performance_feature_importance = data.get('feature_importance', [])
                     models_loaded.append('performance')
                 print(f"✅ Performance model loaded from {self.performance_model_path}")
+                print(f"   - Feature importance: {len(self.performance_feature_importance) if self.performance_feature_importance else 0} features")
             
             # Current model 로드
             current_model_path = os.path.join(self.model_dir, "current_model.pkl")
