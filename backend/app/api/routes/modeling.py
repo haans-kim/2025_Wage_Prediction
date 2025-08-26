@@ -14,6 +14,11 @@ class ModelTrainingRequest(BaseModel):
     model_name: str
     tune_hyperparameters: bool = True
 
+class FeatureAdjustmentRequest(BaseModel):
+    target: str  # 'baseup' or 'performance'
+    feature_values: Dict[str, float]  # Feature name to adjusted value mapping
+    use_baseline: bool = True  # Whether to use baseline values for non-adjusted features
+
 @router.post("/setup")
 async def setup_modeling(request: ModelingSetupRequest) -> Dict[str, Any]:
     """
@@ -262,3 +267,165 @@ async def get_modeling_recommendations() -> Dict[str, Any]:
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate recommendations: {str(e)}")
+
+@router.get("/feature-importance/{target}")
+async def get_feature_importance(
+    target: str,
+    top_n: int = Query(default=10, ge=1, le=50)
+) -> Dict[str, Any]:
+    """
+    특정 모델의 feature importance 반환
+    
+    Args:
+        target: 'baseup' or 'performance' or 'wage_increase_bu_sbl' or 'wage_increase_mi_sbl'
+        top_n: 반환할 상위 feature 개수
+    """
+    try:
+        # Feature importance 가져오기
+        importance_list = modeling_service.get_feature_importance(target)
+        
+        if not importance_list:
+            # Feature importance가 없는 경우, 모델이 학습되었는지 확인
+            if target in ['baseup', 'wage_increase_bu_sbl']:
+                if not modeling_service.baseup_model:
+                    raise HTTPException(status_code=404, detail="Base-up model not trained yet")
+            elif target in ['performance', 'wage_increase_mi_sbl']:
+                if not modeling_service.performance_model:
+                    raise HTTPException(status_code=404, detail="Performance model not trained yet")
+            
+            # 모델은 있지만 feature importance가 없는 경우
+            raise HTTPException(status_code=404, detail="Feature importance not available. Please retrain the model.")
+        
+        # 상위 N개만 반환
+        top_features = importance_list[:top_n] if len(importance_list) > top_n else importance_list
+        
+        # 현재 데이터에서 baseline 값 가져오기
+        from app.services.data_service import data_service
+        baseline_values = {}
+        if data_service.current_data is not None:
+            for feature_info in top_features:
+                feature_name = feature_info['feature']
+                if feature_name in data_service.current_data.columns:
+                    # 최근 값 또는 평균값 사용
+                    baseline_values[feature_name] = float(data_service.current_data[feature_name].iloc[-1])
+        
+        return {
+            'message': 'Feature importance retrieved successfully',
+            'target': target,
+            'total_features': len(importance_list),
+            'top_n': top_n,
+            'features': top_features,
+            'baseline_values': baseline_values
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get feature importance: {str(e)}")
+
+@router.post("/predict-with-adjustments")
+async def predict_with_adjustments(request: FeatureAdjustmentRequest) -> Dict[str, Any]:
+    """
+    조정된 feature 값으로 예측 수행
+    """
+    try:
+        from app.services.data_service import data_service
+        import pandas as pd
+        
+        # 모델 선택
+        if request.target in ['baseup', 'wage_increase_bu_sbl']:
+            model = modeling_service.baseup_model
+            target_name = 'Base-up'
+        elif request.target in ['performance', 'wage_increase_mi_sbl']:
+            model = modeling_service.performance_model
+            target_name = 'Performance'
+        else:
+            raise HTTPException(status_code=400, detail="Invalid target. Use 'baseup' or 'performance'")
+        
+        if not model:
+            raise HTTPException(status_code=404, detail=f"{target_name} model not trained yet")
+        
+        # Baseline 데이터 준비 (최근 데이터 사용)
+        if data_service.current_data is None:
+            raise HTTPException(status_code=404, detail="No data loaded")
+        
+        # 최근 레코드를 baseline으로 사용
+        baseline_data = data_service.current_data.iloc[-1:].copy()
+        
+        # Feature 값 조정
+        for feature_name, adjusted_value in request.feature_values.items():
+            if feature_name in baseline_data.columns:
+                baseline_data[feature_name] = adjusted_value
+            else:
+                # Feature가 없는 경우 경고만 하고 계속 진행
+                import warnings
+                warnings.warn(f"Feature '{feature_name}' not found in data")
+        
+        # 예측 수행
+        try:
+            # PyCaret의 predict_model 사용
+            from pycaret.regression import predict_model
+            import sys
+            import io
+            
+            old_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+            
+            # 타겟 컬럼 제거 (있는 경우)
+            target_cols = ['wage_increase_bu_sbl', 'wage_increase_mi_sbl']
+            for col in target_cols:
+                if col in baseline_data.columns:
+                    baseline_data = baseline_data.drop(columns=[col])
+            
+            predictions = predict_model(model, data=baseline_data, verbose=False)
+            sys.stdout = old_stdout
+            
+            # 예측 결과 추출
+            if 'prediction_label' in predictions.columns:
+                predicted_value = float(predictions['prediction_label'].iloc[0])
+            elif 'Label' in predictions.columns:
+                predicted_value = float(predictions['Label'].iloc[0])
+            else:
+                # 마지막 컬럼이 예측값일 가능성이 높음
+                predicted_value = float(predictions.iloc[0, -1])
+            
+            # Baseline 예측 (조정 전)
+            baseline_original = data_service.current_data.iloc[-1:].copy()
+            for col in target_cols:
+                if col in baseline_original.columns:
+                    baseline_original = baseline_original.drop(columns=[col])
+            
+            sys.stdout = io.StringIO()
+            baseline_predictions = predict_model(model, data=baseline_original, verbose=False)
+            sys.stdout = old_stdout
+            
+            if 'prediction_label' in baseline_predictions.columns:
+                baseline_value = float(baseline_predictions['prediction_label'].iloc[0])
+            elif 'Label' in baseline_predictions.columns:
+                baseline_value = float(baseline_predictions['Label'].iloc[0])
+            else:
+                baseline_value = float(baseline_predictions.iloc[0, -1])
+            
+            # 변화량 계산
+            change = predicted_value - baseline_value
+            change_percent = (change / baseline_value * 100) if baseline_value != 0 else 0
+            
+        except Exception as e:
+            raise RuntimeError(f"Prediction failed: {str(e)}")
+        
+        return {
+            'message': 'Prediction with adjustments completed successfully',
+            'target': request.target,
+            'target_name': target_name,
+            'baseline_prediction': baseline_value,
+            'adjusted_prediction': predicted_value,
+            'change': change,
+            'change_percent': change_percent,
+            'adjusted_features': request.feature_values,
+            'feature_count': len(request.feature_values)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to predict with adjustments: {str(e)}")

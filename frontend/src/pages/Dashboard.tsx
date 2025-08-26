@@ -65,6 +65,23 @@ interface Variable {
   current_value: number;
 }
 
+interface FeatureImportance {
+  feature: string;
+  importance: number;
+  rank: number;
+}
+
+interface FeatureImportanceData {
+  baseup: {
+    features: FeatureImportance[];
+    baseline_values: Record<string, number>;
+  };
+  performance: {
+    features: FeatureImportance[];
+    baseline_values: Record<string, number>;
+  };
+}
+
 interface PredictionResult {
   prediction: number;
   confidence_interval: [number, number];
@@ -90,10 +107,13 @@ export const Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [scenarioResults, setScenarioResults] = useState<any[]>([]);
   const [trendData, setTrendData] = useState<any>(null);
-  const [featureImportance, setFeatureImportance] = useState<any>(null);
+  const [featureImportance, setFeatureImportance] = useState<FeatureImportanceData | null>(null);
+  const [activeTarget, setActiveTarget] = useState<'baseup' | 'performance'>('baseup');
+  const [dynamicVariables, setDynamicVariables] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadDashboardData();
+    loadFeatureImportance();
   }, []);
 
   const loadDashboardData = async () => {
@@ -101,23 +121,20 @@ export const Dashboard: React.FC = () => {
     setError(null);
 
     try {
-      const [templatesRes, variablesRes, indicatorsRes, trendRes, featureRes] = await Promise.all([
+      const [templatesRes, variablesRes, indicatorsRes, trendRes] = await Promise.all([
         apiClient.getScenarioTemplates().catch(() => ({ templates: [] })),
         apiClient.getAvailableVariables().catch(() => ({ variables: [], current_values: {} })),
         apiClient.getEconomicIndicators().catch(() => ({ indicators: {} })),
         apiClient.getTrendData().catch((err) => {
           console.log('Trend data not available:', err);
           return null;
-        }),
-        apiClient.getFeatureImportance('shap', 10).catch(() => null)
+        })
       ]);
 
       setScenarioTemplates(templatesRes.templates || []);
       setAvailableVariables(variablesRes.variables || []);
       setEconomicIndicators(indicatorsRes.indicators || {});
       setTrendData(trendRes);
-      setFeatureImportance(featureRes);
-      console.log('Feature importance data:', featureRes);
 
       // 기본 시나리오로 초기 예측 수행
       if (variablesRes.current_values) {
@@ -137,6 +154,51 @@ export const Dashboard: React.FC = () => {
       }
     } finally {
       setLoading(null);
+    }
+  };
+
+  const loadFeatureImportance = async () => {
+    try {
+      // 두 모델의 feature importance 가져오기
+      const [baseupRes, performanceRes] = await Promise.allSettled([
+        apiClient.get('/api/modeling/feature-importance/baseup', { params: { top_n: 10 } }),
+        apiClient.get('/api/modeling/feature-importance/performance', { params: { top_n: 10 } })
+      ]);
+
+      const featureData: FeatureImportanceData = {
+        baseup: {
+          features: [],
+          baseline_values: {}
+        },
+        performance: {
+          features: [],
+          baseline_values: {}
+        }
+      };
+
+      if (baseupRes.status === 'fulfilled' && baseupRes.value.data.features) {
+        featureData.baseup = {
+          features: baseupRes.value.data.features,
+          baseline_values: baseupRes.value.data.baseline_values || {}
+        };
+        // 초기 동적 변수 설정
+        setDynamicVariables(prev => ({
+          ...prev,
+          ...baseupRes.value.data.baseline_values
+        }));
+      }
+
+      if (performanceRes.status === 'fulfilled' && performanceRes.value.data.features) {
+        featureData.performance = {
+          features: performanceRes.value.data.features,
+          baseline_values: performanceRes.value.data.baseline_values || {}
+        };
+      }
+
+      setFeatureImportance(featureData);
+      console.log('Feature importance loaded:', featureData);
+    } catch (error) {
+      console.error('Failed to load feature importance:', error);
     }
   };
 
@@ -172,10 +234,45 @@ export const Dashboard: React.FC = () => {
     setError(null);
 
     try {
-      const predictionRes = await apiClient.predictWageIncrease(customVariables);
-      setCurrentPrediction(predictionRes);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '사용자 정의 예측 중 오류가 발생했습니다.');
+      // 새로운 API 엔드포인트 사용
+      const response = await apiClient.post('/api/modeling/predict-with-adjustments', {
+        target: activeTarget,
+        feature_values: dynamicVariables,
+        use_baseline: true
+      });
+
+      // 결과를 currentPrediction 형식으로 변환
+      if (response.data) {
+        setCurrentPrediction({
+          prediction: response.data.adjusted_prediction,
+          confidence_interval: [
+            response.data.adjusted_prediction * 0.9,
+            response.data.adjusted_prediction * 1.1
+          ],
+          confidence_level: 0.9,
+          input_variables: dynamicVariables
+        });
+
+        // 시나리오 결과에도 추가
+        setScenarioResults(prev => [
+          ...prev.slice(-4), // 최근 5개만 유지
+          {
+            name: `${activeTarget === 'baseup' ? 'Base-up' : '성과급'} 사용자 정의`,
+            prediction: response.data.adjusted_prediction,
+            baseline: response.data.baseline_prediction,
+            change: response.data.change,
+            change_percent: response.data.change_percent,
+            timestamp: new Date().toISOString()
+          }
+        ]);
+      }
+    } catch (error: any) {
+      console.error('Prediction error:', error);
+      if (error.response?.data?.detail) {
+        setError(error.response.data.detail);
+      } else {
+        setError(error instanceof Error ? error.message : '사용자 정의 예측 중 오류가 발생했습니다.');
+      }
     } finally {
       setLoading(null);
     }
@@ -350,9 +447,13 @@ export const Dashboard: React.FC = () => {
   };
 
   const getWaterfallChartData = () => {
-    if (!featureImportance || !featureImportance.feature_importance || !currentPrediction) return null;
+    if (!featureImportance || !currentPrediction) return null;
+    
+    // 현재 활성 타겟의 feature importance 가져오기
+    const currentFeatures = featureImportance[activeTarget]?.features;
+    if (!currentFeatures || currentFeatures.length === 0) return null;
 
-    const data = featureImportance.feature_importance;
+    const data = currentFeatures;
     
     // 현재 예측값을 백분율로 변환
     const currentPredictionPercent = currentPrediction.prediction * 100;
@@ -717,46 +818,99 @@ export const Dashboard: React.FC = () => {
         {/* 변수 조정 */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Sliders className="mr-2 h-5 w-5" />
-              변수 조정
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Sliders className="mr-2 h-5 w-5" />
+                변수 조정 - {activeTarget === 'baseup' ? 'Base-up' : '성과급'} 모델
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant={activeTarget === 'baseup' ? 'default' : 'outline'}
+                  onClick={() => setActiveTarget('baseup')}
+                >
+                  Base-up
+                </Button>
+                <Button
+                  size="sm"
+                  variant={activeTarget === 'performance' ? 'default' : 'outline'}
+                  onClick={() => setActiveTarget('performance')}
+                >
+                  성과급
+                </Button>
+              </div>
             </CardTitle>
             <CardDescription>
-              핵심 경제 변수를 직접 조정하여 사용자 정의 예측
+              AI가 선정한 중요 변수를 조정하여 사용자 정의 예측
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* 주요 변수들을 직접 정의 */}
-            {[
-              { name: 'cpi_usa', display_name: '미국 CPI', current_value: 3.5, min_value: 0, max_value: 10, unit: '%' },
-              { name: 'wage_increase_major', display_name: '대기업 인상률', current_value: 4.0, min_value: 0, max_value: 10, unit: '%' },
-              { name: 'cpi_kr', display_name: '한국 CPI', current_value: 2.8, min_value: 0, max_value: 10, unit: '%' },
-              { name: 'wage_increase_industry', display_name: '동종업계 인상률', current_value: 3.7, min_value: 0, max_value: 10, unit: '%' },
-              { name: 'revenue_growth', display_name: '매출증가율', current_value: 5.0, min_value: -10, max_value: 20, unit: '%' },
-              { name: 'wage_increase_bu_group', display_name: '그룹 BU 인상률', current_value: 3.8, min_value: 0, max_value: 10, unit: '%' }
-            ].map((variable) => (
-              <div key={variable.name} className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="text-sm font-medium">{variable.display_name}</label>
-                  <span className="text-sm text-muted-foreground">
-                    {formatNumber(customVariables[variable.name] || variable.current_value, 1)}{variable.unit}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={variable.min_value}
-                  max={variable.max_value}
-                  step={0.1}
-                  value={customVariables[variable.name] || variable.current_value}
-                  onChange={(e) => handleVariableChange(variable.name, parseFloat(e.target.value))}
-                  className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{variable.min_value}{variable.unit}</span>
-                  <span>{variable.max_value}{variable.unit}</span>
-                </div>
+            {/* Feature importance 기반 동적 슬라이더 */}
+            {featureImportance && featureImportance[activeTarget]?.features && featureImportance[activeTarget].features.length > 0 ? (
+              featureImportance[activeTarget].features.slice(0, 8).map((feature) => {
+                const baselineValue = featureImportance[activeTarget].baseline_values[feature.feature] || 0;
+                const currentValue = dynamicVariables[feature.feature] ?? baselineValue;
+                
+                // 값의 범위 설정 (baseline의 ±50% 또는 ±10)
+                const range = Math.max(Math.abs(baselineValue * 0.5), 10);
+                const minValue = baselineValue - range;
+                const maxValue = baselineValue + range;
+                
+                // Feature 이름을 사용자 친화적으로 변환
+                const displayName = feature.feature
+                  .replace(/_/g, ' ')
+                  .replace(/\b\w/g, l => l.toUpperCase())
+                  .replace('Cpi', 'CPI')
+                  .replace('Gdp', 'GDP')
+                  .replace('Bu', 'BU')
+                  .replace('Mi', 'MI')
+                  .replace('Kr', '한국')
+                  .replace('Us', '미국')
+                  .replace('Usa', '미국');
+                
+                return (
+                  <div key={feature.feature} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-sm font-medium">
+                        {displayName}
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          (중요도: {(feature.importance * 100).toFixed(1)}%)
+                        </span>
+                      </label>
+                      <span className="text-sm text-muted-foreground">
+                        {formatNumber(currentValue, 2)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={minValue}
+                      max={maxValue}
+                      step={(maxValue - minValue) / 100}
+                      value={currentValue}
+                      onChange={(e) => {
+                        const newValue = parseFloat(e.target.value);
+                        setDynamicVariables(prev => ({
+                          ...prev,
+                          [feature.feature]: newValue
+                        }));
+                      }}
+                      className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer"
+                      disabled={loading === 'prediction'}
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{formatNumber(minValue, 1)}</span>
+                      <span className="font-medium">기준: {formatNumber(baselineValue, 2)}</span>
+                      <span>{formatNumber(maxValue, 1)}</span>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>Feature importance 데이터를 로딩 중...</p>
+                <p className="text-sm mt-2">모델이 학습되지 않았다면 Modeling 페이지에서 먼저 학습을 진행해주세요.</p>
               </div>
-            ))}
+            )}
 
             <Button 
               onClick={handleCustomPrediction}

@@ -21,7 +21,7 @@ try:
     LIME_AVAILABLE = True
 except ImportError:
     LIME_AVAILABLE = False
-    logging.warning("LIME not available. Install with: pip install lime")
+    # logging.warning("LIME not available. Install with: pip install lime")  # LIME은 사용하지 않으므로 경고 제거
 
 try:
     from sklearn.inspection import permutation_importance, partial_dependence

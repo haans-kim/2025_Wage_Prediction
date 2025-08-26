@@ -278,7 +278,7 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {performanceShap && performanceShap.available ? (
+              {performanceShap && performanceShap.available && performanceShap.feature_importance && performanceShap.feature_importance.length > 0 ? (
                 <>
                   <div style={{ height: '300px' }}>
                     {renderShapChart(performanceShap, '성과급', '#10B981')}

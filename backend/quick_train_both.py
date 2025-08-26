@@ -17,11 +17,15 @@ def train_both_models():
     
     # 1. 데이터 로드
     print("\n1️⃣ 데이터 로딩...")
+    print("   📂 master_data.pkl 파일 로드 중...")
     response = requests.post(f"{BASE_URL}/api/data/load-master")
     if response.status_code != 200:
         print(f"❌ 데이터 로드 실패: {response.text}")
         return
-    print("✅ 데이터 로드 완료")
+    data = response.json()
+    if data.get('summary'):
+        shape = data['summary'].get('shape', 'unknown')
+        print(f"✅ 데이터 로드 완료 - {shape}")
     
     models = [
         ("Base-up", "wage_increase_bu_sbl"),
@@ -37,7 +41,12 @@ def train_both_models():
         print(f"{'='*70}")
         
         # 환경 설정
-        print(f"  ⚙️ 환경 설정 중...")
+        print(f"  ⚙️  PyCaret 환경 설정 중...")
+        print(f"     - Train/Test 분할: 80/20")
+        print(f"     - 전처리: 정규화, 결측치 처리")
+        print(f"  ⏱️  환경 설정 진행 중 (약 10-20초 소요)...")
+        
+        setup_start = time.time()
         response = requests.post(
             f"{BASE_URL}/api/modeling/setup",
             json={
@@ -46,14 +55,24 @@ def train_both_models():
                 "session_id": 42
             }
         )
+        setup_elapsed = time.time() - setup_start
+        
         if response.status_code != 200:
             print(f"  ❌ 환경 설정 실패: {response.text}")
             continue
-        print(f"  ✅ 환경 설정 완료")
+        print(f"  ✅ 환경 설정 완료! (소요시간: {setup_elapsed:.1f}초)")
         
         # 모델 비교
-        print(f"\n  📊 모델 비교 중...")
+        print(f"\n  📊 모델 비교 시작...")
+        print(f"  ⏱️  5개 모델 비교 중 (약 1-3분 소요)...")
+        print(f"  🔄 진행 중: Linear Regression, Ridge, Lasso, ElasticNet, Decision Tree...")
+        
+        import time
+        start_time = time.time()
         response = requests.post(f"{BASE_URL}/api/modeling/compare?n_select=5")
+        elapsed = time.time() - start_time
+        
+        print(f"  ⏱️  모델 비교 완료! (소요시간: {elapsed:.1f}초)")
         best_model = 'lr'  # 기본값
         best_metrics = {}
         
@@ -101,6 +120,9 @@ def train_both_models():
         # 모델 훈련
         print(f"\n  🔨 최종 모델 훈련 시작...")
         print(f"     선택된 알고리즘: {best_model.upper()}")
+        print(f"  ⏱️  모델 훈련 중 (약 30초-1분 소요)...")
+        
+        train_start = time.time()
         response = requests.post(
             f"{BASE_URL}/api/modeling/train",
             json={
@@ -108,6 +130,8 @@ def train_both_models():
                 "tune_hyperparameters": False
             }
         )
+        train_elapsed = time.time() - train_start
+        print(f"  ⏱️  훈련 완료! (소요시간: {train_elapsed:.1f}초)")
         if response.status_code != 200:
             print(f"  ❌ 모델 훈련 실패: {response.text}")
             continue

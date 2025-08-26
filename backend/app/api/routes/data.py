@@ -175,6 +175,33 @@ async def validate_current_data() -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error validating data: {str(e)}")
 
+@router.get("/columns")
+async def get_data_columns() -> Dict[str, Any]:
+    """
+    현재 로드된 데이터의 컬럼 정보 반환
+    """
+    try:
+        if data_service.current_data is None:
+            return {
+                "message": "No data loaded",
+                "columns": []
+            }
+        
+        columns = data_service.current_data.columns.tolist()
+        wage_columns = [col for col in columns if 'wage' in col.lower() or 'increase' in col.lower()]
+        
+        return {
+            "message": "Column information retrieved successfully",
+            "total_columns": len(columns),
+            "all_columns": columns,
+            "wage_related_columns": wage_columns,
+            "has_baseup": any('bu' in col.lower() for col in columns),
+            "has_performance": any('mi' in col.lower() for col in columns)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get column info: {str(e)}")
+
 @router.get("/info")
 async def get_data_info() -> Dict[str, Any]:
     """
