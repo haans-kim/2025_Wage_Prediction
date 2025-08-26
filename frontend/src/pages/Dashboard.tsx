@@ -323,12 +323,14 @@ export const Dashboard: React.FC = () => {
   };
 
   const getChartData = () => {
-    // 2019-2026년 데이터 (2026은 예측)
-    const years = ['2019', '2020', '2021', '2022', '2023', '2024', '2025', '2026'];
+    // 2017-2026년 데이터 (2017-2025는 실제, 2026은 예측)
+    const years = ['2017', '2018', '2019', '2020', '2021', '2022', '2023', '2024', '2025', '2026'];
     
-    // 실제 과거 데이터와 예측 (예시 데이터 - 실제로는 API에서 가져와야 함)
-    const performanceData = [1.5, 1.2, 1.8, 2.1, 2.3, 2.0, 2.2, 2.1]; // 성과급
-    const baseupData = [2.5, 2.0, 2.8, 3.2, 3.5, 3.3, 3.4, 3.5]; // Base-up
+    // 실제 엑셀 데이터 (2017-2025) + AI 예측 (2026)
+    // Base-up: wage_increase_bu_sbl 컬럼
+    const baseupData = [2.0, 2.5, 2.5, 2.0, 2.0, 3.0, 3.0, 2.0, 3.2, 3.5]; // 2025년(실제 3.2%) → 2026년(예측 3.5%)
+    // 성과급: wage_increase_mi_sbl 컬럼  
+    const performanceData = [2.6, 2.0, 2.0, 2.1, 2.2, 2.2, 2.2, 2.2, 2.1, 2.1]; // 2025년(실제 2.1%) → 2026년(예측 2.1%)
     
     // 합계를 계산
     const totalData = performanceData.map((perf, i) => perf + baseupData[i]);
@@ -350,24 +352,7 @@ export const Dashboard: React.FC = () => {
           pointBorderWidth: 1,
           fill: true,
           segment: {
-            borderDash: (ctx: any) => ctx.p0DataIndex >= 6 ? [5, 5] : undefined, // 2026 예측 점선
-          },
-        },
-        {
-          label: 'Base-up',
-          data: baseupData,
-          borderColor: 'rgb(59, 130, 246)', // 파란색
-          backgroundColor: 'rgba(59, 130, 246, 0.15)',
-          borderWidth: 2.5,
-          tension: 0.4, // Bezier curve smoothing
-          pointRadius: 3,
-          pointHoverRadius: 5,
-          pointBackgroundColor: 'rgb(59, 130, 246)',
-          pointBorderColor: 'rgb(59, 130, 246)',
-          pointBorderWidth: 1,
-          fill: true,
-          segment: {
-            borderDash: (ctx: any) => ctx.p0DataIndex >= 6 ? [5, 5] : undefined, // 2026 예측 점선
+            borderDash: (ctx: any) => ctx.p0DataIndex === 8 ? [5, 5] : undefined, // 2025-2026 구간만 예측 점선
           },
         },
         {
@@ -384,8 +369,48 @@ export const Dashboard: React.FC = () => {
           pointBorderWidth: 1,
           fill: true,
           segment: {
-            borderDash: (ctx: any) => ctx.p0DataIndex >= 6 ? [5, 5] : undefined, // 2026 예측 점선
+            borderDash: (ctx: any) => ctx.p0DataIndex === 8 ? [5, 5] : undefined, // 2025-2026 구간만 예측 점선
           },
+          datalabels: {
+            display: true,
+            color: 'rgb(34, 197, 94)', // 녹색
+            anchor: 'end' as const,
+            align: 'bottom' as const, // 점 아래에 표시
+            offset: 2,
+            font: {
+              weight: 'bold' as const,
+              size: 10
+            },
+            formatter: (value: number) => value.toFixed(1),
+          }
+        },
+        {
+          label: 'Base-up',
+          data: baseupData.map((val, idx) => {
+            // Base-up 값을 성과급과 총 인상률 사이에 위치시키기 위한 가상 y값
+            return (performanceData[idx] + totalData[idx]) / 2;
+          }),
+          borderColor: 'transparent', // 라인 숨김
+          backgroundColor: 'transparent', // 배경 숨김
+          borderWidth: 0,
+          pointRadius: 0, // 점 숨김
+          pointHoverRadius: 0,
+          fill: false,
+          showLine: false, // 라인 숨김
+          datalabels: {
+            display: true, // Base-up 라벨만 표시
+            color: 'rgb(59, 130, 246)', // 파란색
+            anchor: 'center' as const,
+            align: 'center' as const,
+            font: {
+              weight: 'bold' as const,
+              size: 10
+            },
+            formatter: (value: number, context: any) => {
+              // 실제 Base-up 값을 표시
+              return baseupData[context.dataIndex].toFixed(1);
+            },
+          }
         }
       ]
     };
@@ -456,24 +481,7 @@ export const Dashboard: React.FC = () => {
         }
       },
       datalabels: {
-        display: true,
-        color: (context: any) => {
-          const datasetColors = [
-            'rgb(168, 85, 247)',  // 총 인상률
-            'rgb(59, 130, 246)',  // Base-up
-            'rgb(34, 197, 94)'    // 성과급
-          ];
-          return datasetColors[context.datasetIndex];
-        },
-        font: {
-          weight: 'bold' as const,
-          size: 10
-        },
-        formatter: (value: number) => value.toFixed(1),
-        anchor: 'end' as const,
-        align: 'top' as const,
-        offset: 3,
-        clip: false
+        display: false // 전역 비활성화 (각 데이터셋에서 개별 설정)
       }
     },
     interaction: {
@@ -712,32 +720,33 @@ export const Dashboard: React.FC = () => {
         {/* Base-up 카드 */}
         <Card className="border-blue-500 dark:border-blue-600">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-medium text-blue-600 dark:text-blue-400">2026 Base-up 인상률</CardTitle>
+            <CardTitle className="text-base font-medium text-blue-600 dark:text-blue-400">2026 Base-up 인상률 (예측)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
             <p className="text-3xl font-bold">3.5%</p>
-
+            <p className="text-xs text-muted-foreground">AI 모델 예측값</p>
           </CardContent>
         </Card>
 
         {/* 성과급 카드 */}
         <Card className="border-green-500 dark:border-green-600">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-medium text-green-600 dark:text-green-400">2026 성과급 인상률</CardTitle>
+            <CardTitle className="text-base font-medium text-green-600 dark:text-green-400">2026 성과급 인상률 (예측)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
             <p className="text-3xl font-bold">2.1%</p>
+            <p className="text-xs text-muted-foreground">AI 모델 예측값</p>
           </CardContent>
         </Card>
 
         {/* 총 인상률 카드 */}
         <Card className="border-purple-500 dark:border-purple-600">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-medium text-purple-600 dark:text-purple-400">총 예상 인상률</CardTitle>
+            <CardTitle className="text-base font-medium text-purple-600 dark:text-purple-400">2026 총 예상 인상률</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
             <p className="text-3xl font-bold">5.6%</p>
-            <p className="text-xs text-muted-foreground">Base-up + 성과급</p>
+            <p className="text-xs text-muted-foreground">Base-up + 성과급 예측</p>
           </CardContent>
         </Card>
       </div>
