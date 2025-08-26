@@ -591,6 +591,10 @@ class ModelingService:
             sys.stdout = io.StringIO()
             
             try:
+                # matplotlib backend를 non-interactive로 설정하여 plot 창이 뜨지 않도록 함
+                import matplotlib
+                matplotlib.use('Agg')  # Non-interactive backend
+                
                 from pycaret.regression import interpret_model
                 # PyCaret의 interpret_model을 사용하여 feature importance 추출
                 interpret_model(model, plot='feature', save=False)

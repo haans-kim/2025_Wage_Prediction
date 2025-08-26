@@ -274,44 +274,41 @@ export const Modeling: React.FC = () => {
           <CardContent className="space-y-4">
             {/* Base-up 모델 결과 */}
             {dualModelResults.baseup && (
-              <div className="p-4 rounded-lg border-2" style={{
-                backgroundColor: 'rgb(59 130 246 / 0.15)',
-                borderColor: 'rgb(59 130 246 / 0.5)'
-              }}>
-                <h4 className="font-bold text-lg text-blue-900 dark:text-blue-100 mb-3">
-                  📊 Base-up 모델 (wage_increase_bu_sbl)
+              <div className="border rounded-lg p-4">
+                <h4 className="font-bold text-lg mb-3">
+                  Base-up Model (wage_increase_bu_sbl)
                 </h4>
                 
                 {/* 모델 비교 테이블 */}
                 {dualModelResults.baseup.comparison?.comparison_results && (
                   <div className="mb-4">
-                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
-                      모델 비교 결과:
+                    <p className="text-sm font-semibold mb-2">
+                      Model Comparison Results:
                     </p>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
+                      <table className="w-full text-sm border-collapse">
                         <thead>
-                          <tr className="bg-blue-200/30 dark:bg-blue-800/30">
-                            <th className="px-2 py-1 text-left">순위</th>
-                            <th className="px-2 py-1 text-left">모델</th>
-                            <th className="px-2 py-1 text-right">MAE</th>
-                            <th className="px-2 py-1 text-right">RMSE</th>
-                            <th className="px-2 py-1 text-right">R2</th>
-                            <th className="px-2 py-1 text-right">MAPE</th>
+                          <tr className="border-b">
+                            <th className="px-3 py-2 text-left">Rank</th>
+                            <th className="px-3 py-2 text-left">Model</th>
+                            <th className="px-3 py-2 text-right">MAE</th>
+                            <th className="px-3 py-2 text-right">RMSE</th>
+                            <th className="px-3 py-2 text-right">R2</th>
+                            <th className="px-3 py-2 text-right">MAPE</th>
                           </tr>
                         </thead>
                         <tbody>
                           {dualModelResults.baseup.comparison.comparison_results.slice(0, 5).map((model: any, idx: number) => (
-                            <tr key={idx} className={idx === 0 ? 'bg-blue-300/20 dark:bg-blue-700/20 font-bold' : 'bg-white/30 dark:bg-black/20'}>
-                              <td className="px-2 py-1">{idx + 1}</td>
-                              <td className="px-2 py-1">
+                            <tr key={idx} className={idx === 0 ? 'bg-muted/50 font-semibold' : 'border-b'}>
+                              <td className="px-3 py-2">{idx + 1}</td>
+                              <td className="px-3 py-2">
                                 {model.Model}
-                                {idx === 0 && ' 🏆'}
+                                {idx === 0 && ' ★'}
                               </td>
-                              <td className="px-2 py-1 text-right">{model.MAE?.toFixed(4) || 'N/A'}</td>
-                              <td className="px-2 py-1 text-right">{model.RMSE?.toFixed(4) || 'N/A'}</td>
-                              <td className="px-2 py-1 text-right">{model.R2?.toFixed(4) || 'N/A'}</td>
-                              <td className="px-2 py-1 text-right">{model.MAPE?.toFixed(2) || 'N/A'}%</td>
+                              <td className="px-3 py-2 text-right">{model.MAE?.toFixed(4) || 'N/A'}</td>
+                              <td className="px-3 py-2 text-right">{model.RMSE?.toFixed(4) || 'N/A'}</td>
+                              <td className="px-3 py-2 text-right">{model.R2?.toFixed(4) || 'N/A'}</td>
+                              <td className="px-3 py-2 text-right">{model.MAPE?.toFixed(2) || 'N/A'}%</td>
                             </tr>
                           ))}
                         </tbody>
@@ -320,19 +317,19 @@ export const Modeling: React.FC = () => {
                   </div>
                 )}
                 
-                <div className="bg-white/50 dark:bg-black/30 p-3 rounded-lg">
-                  <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">
-                    선정된 최적 모델:
+                <div className="border rounded p-3 bg-muted/20">
+                  <p className="text-sm font-semibold">
+                    Selected Model:
                   </p>
-                  <p className="text-2xl font-bold text-blue-800 dark:text-blue-200 mt-1">
+                  <p className="text-xl font-bold mt-1">
                     {dualModelResults.baseup.selectedModel}
                   </p>
                   {dualModelResults.baseup.metrics && (
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      <p className="text-xs">MAE: {dualModelResults.baseup.metrics.MAE?.toFixed(4) || 'N/A'}</p>
-                      <p className="text-xs">RMSE: {dualModelResults.baseup.metrics.RMSE?.toFixed(4) || 'N/A'}</p>
-                      <p className="text-xs">R2: {dualModelResults.baseup.metrics.R2?.toFixed(4) || 'N/A'}</p>
-                      <p className="text-xs">MAPE: {dualModelResults.baseup.metrics.MAPE?.toFixed(2) || 'N/A'}%</p>
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <p className="text-sm">MAE: {dualModelResults.baseup.metrics.MAE?.toFixed(4) || 'N/A'}</p>
+                      <p className="text-sm">RMSE: {dualModelResults.baseup.metrics.RMSE?.toFixed(4) || 'N/A'}</p>
+                      <p className="text-sm">R2: {dualModelResults.baseup.metrics.R2?.toFixed(4) || 'N/A'}</p>
+                      <p className="text-sm">MAPE: {dualModelResults.baseup.metrics.MAPE?.toFixed(2) || 'N/A'}%</p>
                     </div>
                   )}
                 </div>
@@ -341,44 +338,41 @@ export const Modeling: React.FC = () => {
 
             {/* Performance 모델 결과 */}
             {dualModelResults.performance && (
-              <div className="p-4 rounded-lg border-2" style={{
-                backgroundColor: 'rgb(34 197 94 / 0.15)',
-                borderColor: 'rgb(34 197 94 / 0.5)'
-              }}>
-                <h4 className="font-bold text-lg text-green-900 dark:text-green-100 mb-3">
-                  💰 성과급 모델 (wage_increase_mi_sbl)
+              <div className="border rounded-lg p-4">
+                <h4 className="font-bold text-lg mb-3">
+                  Performance Model (wage_increase_mi_sbl)
                 </h4>
                 
                 {/* 모델 비교 테이블 */}
                 {dualModelResults.performance.comparison?.comparison_results && (
                   <div className="mb-4">
-                    <p className="text-sm font-semibold text-green-900 dark:text-green-100 mb-2">
-                      모델 비교 결과:
+                    <p className="text-sm font-semibold mb-2">
+                      Model Comparison Results:
                     </p>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
+                      <table className="w-full text-sm border-collapse">
                         <thead>
-                          <tr className="bg-green-200/30 dark:bg-green-800/30">
-                            <th className="px-2 py-1 text-left">순위</th>
-                            <th className="px-2 py-1 text-left">모델</th>
-                            <th className="px-2 py-1 text-right">MAE</th>
-                            <th className="px-2 py-1 text-right">RMSE</th>
-                            <th className="px-2 py-1 text-right">R2</th>
-                            <th className="px-2 py-1 text-right">MAPE</th>
+                          <tr className="border-b">
+                            <th className="px-3 py-2 text-left">Rank</th>
+                            <th className="px-3 py-2 text-left">Model</th>
+                            <th className="px-3 py-2 text-right">MAE</th>
+                            <th className="px-3 py-2 text-right">RMSE</th>
+                            <th className="px-3 py-2 text-right">R2</th>
+                            <th className="px-3 py-2 text-right">MAPE</th>
                           </tr>
                         </thead>
                         <tbody>
                           {dualModelResults.performance.comparison.comparison_results.slice(0, 5).map((model: any, idx: number) => (
-                            <tr key={idx} className={idx === 0 ? 'bg-green-300/20 dark:bg-green-700/20 font-bold' : 'bg-white/30 dark:bg-black/20'}>
-                              <td className="px-2 py-1">{idx + 1}</td>
-                              <td className="px-2 py-1">
+                            <tr key={idx} className={idx === 0 ? 'bg-muted/50 font-semibold' : 'border-b'}>
+                              <td className="px-3 py-2">{idx + 1}</td>
+                              <td className="px-3 py-2">
                                 {model.Model}
-                                {idx === 0 && ' 🏆'}
+                                {idx === 0 && ' ★'}
                               </td>
-                              <td className="px-2 py-1 text-right">{model.MAE?.toFixed(4) || 'N/A'}</td>
-                              <td className="px-2 py-1 text-right">{model.RMSE?.toFixed(4) || 'N/A'}</td>
-                              <td className="px-2 py-1 text-right">{model.R2?.toFixed(4) || 'N/A'}</td>
-                              <td className="px-2 py-1 text-right">{model.MAPE?.toFixed(2) || 'N/A'}%</td>
+                              <td className="px-3 py-2 text-right">{model.MAE?.toFixed(4) || 'N/A'}</td>
+                              <td className="px-3 py-2 text-right">{model.RMSE?.toFixed(4) || 'N/A'}</td>
+                              <td className="px-3 py-2 text-right">{model.R2?.toFixed(4) || 'N/A'}</td>
+                              <td className="px-3 py-2 text-right">{model.MAPE?.toFixed(2) || 'N/A'}%</td>
                             </tr>
                           ))}
                         </tbody>
@@ -387,19 +381,19 @@ export const Modeling: React.FC = () => {
                   </div>
                 )}
                 
-                <div className="bg-white/50 dark:bg-black/30 p-3 rounded-lg">
-                  <p className="text-sm font-semibold text-green-900 dark:text-green-100">
-                    선정된 최적 모델:
+                <div className="border rounded p-3 bg-muted/20">
+                  <p className="text-sm font-semibold">
+                    Selected Model:
                   </p>
-                  <p className="text-2xl font-bold text-green-800 dark:text-green-200 mt-1">
+                  <p className="text-xl font-bold mt-1">
                     {dualModelResults.performance.selectedModel}
                   </p>
                   {dualModelResults.performance.metrics && (
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      <p className="text-xs">MAE: {dualModelResults.performance.metrics.MAE?.toFixed(4) || 'N/A'}</p>
-                      <p className="text-xs">RMSE: {dualModelResults.performance.metrics.RMSE?.toFixed(4) || 'N/A'}</p>
-                      <p className="text-xs">R2: {dualModelResults.performance.metrics.R2?.toFixed(4) || 'N/A'}</p>
-                      <p className="text-xs">MAPE: {dualModelResults.performance.metrics.MAPE?.toFixed(2) || 'N/A'}%</p>
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <p className="text-sm">MAE: {dualModelResults.performance.metrics.MAE?.toFixed(4) || 'N/A'}</p>
+                      <p className="text-sm">RMSE: {dualModelResults.performance.metrics.RMSE?.toFixed(4) || 'N/A'}</p>
+                      <p className="text-sm">R2: {dualModelResults.performance.metrics.R2?.toFixed(4) || 'N/A'}</p>
+                      <p className="text-sm">MAPE: {dualModelResults.performance.metrics.MAPE?.toFixed(2) || 'N/A'}%</p>
                     </div>
                   )}
                 </div>
