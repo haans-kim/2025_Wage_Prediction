@@ -402,35 +402,44 @@ export const Modeling: React.FC = () => {
 
             {/* 종합 결과 */}
             {dualModelResults.baseup && dualModelResults.performance && (
-              <div className="p-4 rounded-lg border-2" style={{
-                backgroundColor: 'rgb(168 85 247 / 0.15)',
-                borderColor: 'rgb(168 85 247 / 0.5)'
-              }}>
-                <h4 className="font-bold text-lg text-purple-900 dark:text-purple-100 mb-3">
-                  ✅ 최종 결과 요약
+              <div className="border rounded-lg p-4">
+                <h4 className="font-bold text-lg mb-3">
+                  Final Results Summary
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white/50 dark:bg-black/30 p-3 rounded-lg">
-                    <p className="text-xs text-purple-700 dark:text-purple-300 mb-1">Base-up 모델</p>
-                    <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
-                      {dualModelResults.baseup.selectedModel}
-                    </p>
-                    <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                      MAE: {dualModelResults.baseup.metrics?.MAE?.toFixed(4) || 'N/A'}
-                    </p>
-                  </div>
-                  <div className="bg-white/50 dark:bg-black/30 p-3 rounded-lg">
-                    <p className="text-xs text-purple-700 dark:text-purple-300 mb-1">성과급 모델</p>
-                    <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
-                      {dualModelResults.performance.selectedModel}
-                    </p>
-                    <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                      MAE: {dualModelResults.performance.metrics?.MAE?.toFixed(4) || 'N/A'}
-                    </p>
-                  </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="px-3 py-2 text-left">Model Type</th>
+                        <th className="px-3 py-2 text-left">Selected Algorithm</th>
+                        <th className="px-3 py-2 text-right">MAE</th>
+                        <th className="px-3 py-2 text-right">RMSE</th>
+                        <th className="px-3 py-2 text-right">R2</th>
+                        <th className="px-3 py-2 text-right">MAPE</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b">
+                        <td className="px-3 py-2 font-medium">Base-up Model</td>
+                        <td className="px-3 py-2 font-semibold">{dualModelResults.baseup.selectedModel}</td>
+                        <td className="px-3 py-2 text-right">{dualModelResults.baseup.metrics?.MAE?.toFixed(4) || 'N/A'}</td>
+                        <td className="px-3 py-2 text-right">{dualModelResults.baseup.metrics?.RMSE?.toFixed(4) || 'N/A'}</td>
+                        <td className="px-3 py-2 text-right">{dualModelResults.baseup.metrics?.R2?.toFixed(4) || 'N/A'}</td>
+                        <td className="px-3 py-2 text-right">{dualModelResults.baseup.metrics?.MAPE?.toFixed(2) || 'N/A'}%</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="px-3 py-2 font-medium">Performance Model</td>
+                        <td className="px-3 py-2 font-semibold">{dualModelResults.performance.selectedModel}</td>
+                        <td className="px-3 py-2 text-right">{dualModelResults.performance.metrics?.MAE?.toFixed(4) || 'N/A'}</td>
+                        <td className="px-3 py-2 text-right">{dualModelResults.performance.metrics?.RMSE?.toFixed(4) || 'N/A'}</td>
+                        <td className="px-3 py-2 text-right">{dualModelResults.performance.metrics?.R2?.toFixed(4) || 'N/A'}</td>
+                        <td className="px-3 py-2 text-right">{dualModelResults.performance.metrics?.MAPE?.toFixed(2) || 'N/A'}%</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-                <p className="text-sm text-purple-700 dark:text-purple-300 mt-3 text-center">
-                  💡 전체 인상률 = Base-up + 성과급
+                <p className="text-sm text-muted-foreground mt-3 text-center">
+                  Note: Total wage increase = Base-up + Performance
                 </p>
               </div>
             )}
