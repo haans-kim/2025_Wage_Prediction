@@ -137,8 +137,20 @@ class AnalysisService:
             
             analysis_data = analysis_data.copy()  # 복사본 생성
             
+            # PyCaret Pipeline에서 실제 모델 추출 (feature importance용)
+            actual_model = model
+            if hasattr(model, 'steps'):
+                # Pipeline의 마지막 단계가 실제 모델
+                actual_model = model.steps[-1][1] if model.steps else model
+                print(f"📊 Extracted model from pipeline: {type(actual_model).__name__}")
+                
+                # 중첩된 Pipeline 처리
+                if hasattr(actual_model, 'steps'):
+                    actual_model = actual_model.steps[-1][1] if actual_model.steps else actual_model
+                    print(f"📊 Extracted from nested pipeline: {type(actual_model).__name__}")
+            
             # feature_names_in_ 속성 문제 방지
-            # 모델 예측 함수 래핑 (PyCaret 호환성)
+            # 모델 예측 함수 래핑 (PyCaret 호환성) - 전체 Pipeline 사용
             def model_predict_wrapper(X):
                 try:
                     # numpy array를 DataFrame으로 변환
@@ -183,16 +195,52 @@ class AnalysisService:
                     # 안전한 fallback - 평균값 반환
                     return np.full(len(X), 0.042)
             
+            shap_values = None
+            explainer = None
+            
             try:
-                # Tree-based models 시도 - PyCaret 모델은 KernelExplainer 사용
-                # PyCaret은 복잡한 파이프라인이므로 TreeExplainer 사용 불가
-                if False:  # Tree explainer 비활성화 (PyCaret 파이프라인은 지원 안됨)
-                    print(f"📊 Using TreeExplainer for {type(model).__name__}")
-                    # TreeExplainer는 원본 모델 사용
-                    explainer = shap.TreeExplainer(model)
-                    # 하지만 데이터는 DataFrame으로 변환해서 전달
-                    analysis_df = pd.DataFrame(analysis_data, columns=self.feature_names)
-                    shap_values = explainer.shap_values(analysis_df)
+                # 추출된 실제 모델이 Tree-based인지 확인
+                is_tree_based = hasattr(actual_model, 'tree_') or hasattr(actual_model, 'estimators_') or \
+                               type(actual_model).__name__ in ['DecisionTreeRegressor', 'RandomForestRegressor', 
+                                                               'GradientBoostingRegressor', 'XGBRegressor', 
+                                                               'LGBMRegressor']
+                
+                if is_tree_based and hasattr(actual_model, 'feature_importances_'):
+                    # Tree-based 모델은 feature_importances_를 직접 사용
+                    print(f"📊 Using feature_importances_ from {type(actual_model).__name__}")
+                    
+                    # Feature importance를 SHAP values처럼 변환
+                    feature_importance = actual_model.feature_importances_
+                    n_samples = len(analysis_data)
+                    
+                    # 각 샘플에 대해 같은 feature importance를 복제 (SHAP 형식 맞추기)
+                    shap_values = np.tile(feature_importance, (n_samples, 1))
+                    
+                    # 값을 정규화
+                    shap_values = shap_values / np.sum(np.abs(shap_values))
+                    
+                elif hasattr(actual_model, 'coef_'):
+                    # Linear 모델은 coefficients를 직접 사용
+                    print(f"📊 Using coefficients from {type(actual_model).__name__}")
+                    
+                    # Coefficients를 feature importance로 변환
+                    coefs = actual_model.coef_
+                    if len(coefs.shape) > 1:
+                        coefs = coefs[0]
+                    
+                    print(f"📊 Coefficients shape: {coefs.shape}, Non-zero: {np.sum(np.abs(coefs) > 1e-10)}")
+                    print(f"📊 Top 5 coefs: {sorted(enumerate(coefs), key=lambda x: abs(x[1]), reverse=True)[:5]}")
+                    
+                    # 절대값을 feature importance로 사용
+                    feature_importance = np.abs(coefs)
+                    n_samples = len(analysis_data)
+                    
+                    # 각 샘플에 대해 같은 importance를 복제
+                    shap_values = np.tile(feature_importance, (n_samples, 1))
+                    
+                    # 값을 정규화
+                    shap_values = shap_values / np.sum(np.abs(shap_values))
+                    
                 else:
                     # 다른 모델들은 KernelExplainer 사용 (더 안전함)
                     print(f"📊 Using KernelExplainer for {type(model).__name__}")
@@ -271,16 +319,93 @@ class AnalysisService:
                     importance_scores = np.abs(shap_values)
                     
                 print(f"📊 Importance scores: {importance_scores[:5]}...")
+                
+                # SHAP 값이 모두 0인 경우 PyCaret feature importance 사용
+                if np.all(importance_scores == 0):
+                    print("⚠️ SHAP values are all zero, using PyCaret feature importance")
+                    from app.services.modeling_service import modeling_service
+                    
+                    # 현재 타겟에 따라 적절한 feature importance 가져오기
+                    if hasattr(modeling_service, 'current_target'):
+                        if modeling_service.current_target == 'wage_increase_bu_sbl':
+                            pycaret_importance = modeling_service.baseup_feature_importance
+                        elif modeling_service.current_target == 'wage_increase_mi_sbl':
+                            pycaret_importance = modeling_service.performance_feature_importance
+                        else:
+                            pycaret_importance = modeling_service.current_feature_importance
+                    else:
+                        pycaret_importance = modeling_service.current_feature_importance
+                    
+                    # PyCaret feature importance를 importance_scores 형태로 변환
+                    if pycaret_importance:
+                        # feature 이름과 importance 딕셔너리로 변환
+                        importance_dict = {item['feature']: item['importance'] for item in pycaret_importance}
+                        # 현재 feature 순서에 맞게 importance scores 생성
+                        importance_scores = np.array([
+                            importance_dict.get(feature, 0.0) for feature in self.feature_names
+                        ])
+                        print(f"📊 Using PyCaret importance: {importance_scores[:5]}...")
             else:
                 importance_scores = np.abs(shap_values[0]).mean(axis=0) if len(shap_values) > 0 else []
+            
+            # Feature 한글명 매핑
+            feature_name_kr = {
+                # 한국 경제 지표
+                'gdp_growth_kr': 'GDP 성장률(한국)',
+                'cpi_kr': '소비자물가지수(한국)',
+                'unemployment_rate_kr': '실업률(한국)',
+                'minimum_wage_increase_kr': '최저임금 인상률',
+                
+                # 미국 경제 지표
+                'gdp_growth_usa': 'GDP 성장률(미국)',
+                'cpi_usa': '소비자물가지수(미국)',
+                'unemployment_rate_us': '실업률(미국)',
+                'ecii_usa': '고용비용지수(미국)',
+                
+                # 환율
+                'exchange_rate_change_krw': '원화 환율 변동률',
+                
+                # 삼바(삼성바이오로직스) 지표
+                'revenue_growth_sbl': '매출 증가율(삼바)',
+                'operating_profit_growth_sbl': '영업이익 증가율(삼바)',
+                'op_profit_growth_sbl': '영업이익 증가율(삼바)',  # 약어 버전
+                'labor_cost_per_employee_sbl': '직원당 인건비(삼바)',
+                'employee_growth_rate_sbl': '직원수 증가율(삼바)',
+                'wage_increase_bu_sbl': 'Base-up 인상률(삼바)',
+                'wage_increase_mi_sbl': '성과급 인상률(삼바)',
+                'evagr_sbl': 'EVA 성장률(삼바)',
+                'roce_sbl': 'ROCE(삼바)',
+                'hcroi_sbl': 'HC ROI(삼바)',
+                'hcva_sbl': 'HC 부가가치(삼바)',
+                
+                # 동종업계 지표
+                'wage_increase_bu_ce': '동종업계 Base-up',
+                'wage_increase_mi_ce': '동종업계 성과급',
+                'evagr_ce': 'EVA 성장률(동종업계)',
+                'roce_ce': 'ROCE(동종업계)',
+                'hcroi_ce': 'HC ROI(동종업계)',
+                'hcva_ce': 'HC 부가가치(동종업계)',
+                'op_profit_growth_ce': '영업이익 증가율(동종업계)',
+                
+                # 대기업 지표
+                'wage_increase_bu_lg': '대기업 Base-up',
+                'wage_increase_mi_lg': '대기업 성과급',
+                
+                # 기타
+                'year': '연도',
+                'ceo_message': 'CEO 메시지'
+            }
             
             # Top N features
             feature_importance = []
             if len(importance_scores) > 0 and self.feature_names:
                 for i, score in enumerate(importance_scores):
                     if i < len(self.feature_names):
+                        feature_name = self.feature_names[i]
+                        # 한글명이 있으면 사용, 없으면 원본 사용
+                        display_name = feature_name_kr.get(feature_name, feature_name)
                         feature_importance.append({
-                            "feature": self.feature_names[i],
+                            "feature": display_name,
                             "importance": float(score)
                         })
                 

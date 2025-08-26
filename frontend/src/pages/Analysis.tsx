@@ -61,6 +61,8 @@ export const Analysis: React.FC = () => {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedSample, setSelectedSample] = useState<number>(0);
+  const [baseupShapData, setBaseupShapData] = useState<FeatureImportance[]>([]);
+  const [performanceShapData, setPerformanceShapData] = useState<FeatureImportance[]>([]);
 
   useEffect(() => {
     loadAnalysisData();
@@ -71,15 +73,19 @@ export const Analysis: React.FC = () => {
     setError(null);
 
     try {
-      const [shapRes, featureRes, performanceRes] = await Promise.all([
+      const [shapRes, featureRes, performanceRes, baseupShapRes, performanceShapRes] = await Promise.all([
         apiClient.getShapAnalysis().catch(() => ({ available: false, error: 'SHAP 분석을 사용할 수 없습니다.' })),
         apiClient.getFeatureImportance().catch(() => ({ feature_importance: [], error: 'Feature importance 분석을 사용할 수 없습니다.' })),
-        apiClient.getModelPerformance().catch(() => ({ performance: {}, error: '성능 분석을 사용할 수 없습니다.' }))
+        apiClient.getModelPerformance().catch(() => ({ performance: {}, error: '성능 분석을 사용할 수 없습니다.' })),
+        apiClient.get('/api/analysis/shap', { params: { target: 'wage_increase_bu_sbl', top_n: 3 }}).catch(() => ({ data: { feature_importance: [] }})),
+        apiClient.get('/api/analysis/shap', { params: { target: 'wage_increase_mi_sbl', top_n: 3 }}).catch(() => ({ data: { feature_importance: [] }}))
       ]);
 
       setShapAnalysis(shapRes);
       setFeatureImportance(featureRes.feature_importance || []);
       setModelPerformance(performanceRes);
+      setBaseupShapData(baseupShapRes.data?.feature_importance || []);
+      setPerformanceShapData(performanceShapRes.data?.feature_importance || []);
     } catch (error) {
       setError('분석 데이터를 불러오는 중 오류가 발생했습니다.');
       console.error('Analysis data loading failed:', error);
@@ -248,9 +254,20 @@ export const Analysis: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm space-y-1">
-            <p>• 미국 CPI (64.7%)</p>
-            <p>• 대기업 인상률 (23.7%)</p>
-            <p>• 권고: 3.5% 인상</p>
+            {baseupShapData.length > 0 ? (
+              <>
+                {baseupShapData.slice(0, 3).map((item, idx) => (
+                  <p key={idx}>• {item.feature} ({(item.importance * 100).toFixed(1)}%)</p>
+                ))}
+                <p className="font-semibold pt-1">• 권고: 3.5% 인상</p>
+              </>
+            ) : (
+              <>
+                <p>• 미국 CPI (64.7%)</p>
+                <p>• 대기업 인상률 (23.7%)</p>
+                <p>• 권고: 3.5% 인상</p>
+              </>
+            )}
           </CardContent>
         </Card>
         
@@ -261,9 +278,20 @@ export const Analysis: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm space-y-1">
-            <p>• 매출증가율 (핵심)</p>
-            <p>• 실적 연동 설계</p>
-            <p>• 권고: 2.1% 지급</p>
+            {performanceShapData.length > 0 ? (
+              <>
+                {performanceShapData.slice(0, 3).map((item, idx) => (
+                  <p key={idx}>• {item.feature} ({(item.importance * 100).toFixed(1)}%)</p>
+                ))}
+                <p className="font-semibold pt-1">• 권고: 2.1% 지급</p>
+              </>
+            ) : (
+              <>
+                <p>• 매출증가율 (핵심)</p>
+                <p>• 실적 연동 설계</p>
+                <p>• 권고: 2.1% 지급</p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

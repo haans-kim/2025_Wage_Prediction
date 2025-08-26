@@ -106,13 +106,22 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
       indexAxis: 'y' as const,
       responsive: true,
       maintainAspectRatio: false,
+      layout: {
+        padding: {
+          bottom: 20
+        }
+      },
       plugins: {
         legend: {
           display: false
         },
         title: {
           display: true,
-          text: title
+          text: title,
+          padding: {
+            top: 10,
+            bottom: 10
+          }
         },
         tooltip: {
           callbacks: {
@@ -134,7 +143,7 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
     };
 
     return (
-      <div style={{ height: '400px' }}>
+      <div style={{ height: '350px' }}>
         <Bar data={chartData} options={options} />
       </div>
     );
@@ -244,24 +253,11 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
                 Base-up 특성 중요도
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pb-6">
               {baseupShap && baseupShap.available ? (
-                <>
-                  <div style={{ height: '300px' }}>
-                    {renderShapChart(baseupShap, 'Base-up', '#3B82F6')}
-                  </div>
-                  <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                    <h4 className="font-semibold text-blue-900 dark:text-blue-300 mb-2">핵심 인사이트</h4>
-                    <ul className="space-y-1 text-sm text-blue-800 dark:text-blue-200">
-                      <li>• 미국 CPI: 64.7%</li>
-                      <li>• 대기업 인상률: 23.7%</li>
-                      <li>• 한국 CPI: 11.6%</li>
-                    </ul>
-                    <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-                      글로벌 인플레이션이 핵심 동인
-                    </p>
-                  </div>
-                </>
+                <div style={{ height: '350px', paddingBottom: '20px' }}>
+                  {renderShapChart(baseupShap, 'Base-up', '#3B82F6')}
+                </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   SHAP 분석 데이터를 로딩 중...
@@ -277,24 +273,11 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
                 성과급 특성 중요도
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pb-6">
               {performanceShap && performanceShap.available && performanceShap.feature_importance && performanceShap.feature_importance.length > 0 ? (
-                <>
-                  <div style={{ height: '300px' }}>
-                    {renderShapChart(performanceShap, '성과급', '#10B981')}
-                  </div>
-                  <div className="mt-4 p-4 bg-green-50 dark:bg-green-950 rounded-lg">
-                    <h4 className="font-semibold text-green-900 dark:text-green-300 mb-2">핵심 인사이트</h4>
-                    <ul className="space-y-1 text-sm text-green-800 dark:text-green-200">
-                      <li>• 매출증가율: 계수 0.00196</li>
-                      <li>• 그룹 BU: 계수 0.00053</li>
-                      <li>• 대기업: 계수 0.00011</li>
-                    </ul>
-                    <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-                      회사 실적이 성과급의 핵심
-                    </p>
-                  </div>
-                </>
+                <div style={{ height: '350px', paddingBottom: '20px' }}>
+                  {renderShapChart(performanceShap, '성과급', '#10B981')}
+                </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   SHAP 분석 데이터를 로딩 중...

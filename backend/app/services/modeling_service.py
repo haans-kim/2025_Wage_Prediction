@@ -261,6 +261,10 @@ class ModelingService:
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         
+        # 디버깅 출력 (stdout 억제 전에)
+        print(f"📊 Comparing models: {models_to_use}")
+        print(f"📊 Current target: {self.current_target}")
+        
         try:
             # 출력 억제
             sys.stdout = io.StringIO()
@@ -282,6 +286,18 @@ class ModelingService:
             
             # 결과 정보 추출
             comparison_results = pull()
+            
+            # stdout 복원 후 디버깅 출력
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            print(f"📊 Pull results shape: {comparison_results.shape if hasattr(comparison_results, 'shape') else 'N/A'}")
+            print(f"📊 Pull results columns: {list(comparison_results.columns) if hasattr(comparison_results, 'columns') else 'N/A'}")
+            if not comparison_results.empty:
+                print(f"📊 Top model from pull: {comparison_results.index[0]}")
+            
+            # 다시 억제
+            sys.stdout = io.StringIO()
+            sys.stderr = io.StringIO()
             
             self.model_results = {
                 'best_models': best_models,
@@ -331,16 +347,30 @@ class ModelingService:
         comparison_results = []
         if self.model_results['comparison_df'] is not None:
             df = self.model_results['comparison_df']
-            for idx, row in df.iterrows():
-                comparison_results.append({
-                    'Model': idx if isinstance(idx, str) else str(idx),
-                    'MAE': float(row.get('MAE', 0)) if 'MAE' in row else None,
-                    'MSE': float(row.get('MSE', 0)) if 'MSE' in row else None,
-                    'RMSE': float(row.get('RMSE', 0)) if 'RMSE' in row else None,
-                    'R2': float(row.get('R2', 0)) if 'R2' in row else None,
-                    'RMSLE': float(row.get('RMSLE', 0)) if 'RMSLE' in row else None,
-                    'MAPE': float(row.get('MAPE', 0)) if 'MAPE' in row else None
-                })
+            # Model 열이 있는 경우 사용, 없으면 인덱스 사용
+            if 'Model' in df.columns:
+                for _, row in df.iterrows():
+                    comparison_results.append({
+                        'Model': str(row['Model']),
+                        'MAE': float(row.get('MAE', 0)) if 'MAE' in row else None,
+                        'MSE': float(row.get('MSE', 0)) if 'MSE' in row else None,
+                        'RMSE': float(row.get('RMSE', 0)) if 'RMSE' in row else None,
+                        'R2': float(row.get('R2', 0)) if 'R2' in row else None,
+                        'RMSLE': float(row.get('RMSLE', 0)) if 'RMSLE' in row else None,
+                        'MAPE': float(row.get('MAPE', 0)) if 'MAPE' in row else None
+                    })
+            else:
+                # Model 열이 없으면 인덱스를 모델명으로 사용
+                for idx, row in df.iterrows():
+                    comparison_results.append({
+                        'Model': idx if isinstance(idx, str) else str(idx),
+                        'MAE': float(row.get('MAE', 0)) if 'MAE' in row else None,
+                        'MSE': float(row.get('MSE', 0)) if 'MSE' in row else None,
+                        'RMSE': float(row.get('RMSE', 0)) if 'RMSE' in row else None,
+                        'R2': float(row.get('R2', 0)) if 'R2' in row else None,
+                        'RMSLE': float(row.get('RMSLE', 0)) if 'RMSLE' in row else None,
+                        'MAPE': float(row.get('MAPE', 0)) if 'MAPE' in row else None
+                    })
         
         return {
             'message': 'Model comparison completed',
@@ -358,6 +388,33 @@ class ModelingService:
         if not self.is_setup_complete:
             raise RuntimeError("PyCaret environment not setup. Call setup_pycaret_environment first.")
         
+        # 모델 이름 매핑 (전체 이름 -> 코드)
+        model_name_map = {
+            'Linear Regression': 'lr',
+            'Ridge Regression': 'ridge',
+            'Lasso Regression': 'lasso',
+            'Elastic Net': 'en',
+            'Decision Tree Regressor': 'dt',
+            'Random Forest Regressor': 'rf',
+            'Gradient Boosting Regressor': 'gbr',
+            'XGBoost Regressor': 'xgboost',
+            'Light Gradient Boosting Machine': 'lightgbm',
+            # 코드도 그대로 받을 수 있도록
+            'lr': 'lr',
+            'ridge': 'ridge',
+            'lasso': 'lasso',
+            'en': 'en',
+            'dt': 'dt',
+            'rf': 'rf',
+            'gbr': 'gbr',
+            'xgboost': 'xgboost',
+            'lightgbm': 'lightgbm'
+        }
+        
+        # 모델 이름을 코드로 변환
+        model_code = model_name_map.get(model_name, model_name.lower())
+        print(f"📊 Training model: {model_name} -> {model_code}")
+        
         # PyCaret이 자체적으로 seed를 관리하도록 함
         
         old_stdout = sys.stdout
@@ -369,7 +426,7 @@ class ModelingService:
             sys.stderr = io.StringIO()
             
             # 모델 생성
-            model = create_model(model_name, verbose=False)
+            model = create_model(model_code, verbose=False)
             
             # 모델 튜닝 (선택적)
             try:
@@ -584,6 +641,7 @@ class ModelingService:
     def _capture_feature_importance(self, model) -> List[Dict[str, Any]]:
         """모델의 feature importance를 캡처하는 내부 메서드"""
         importance_list = []
+        print(f"DEBUG: _capture_feature_importance called with model type: {type(model).__name__}")
         
         try:
             # 방법 1: PyCaret의 interpret_model 시도 (기본적으로 feature_importance 사용)
@@ -631,6 +689,7 @@ class ModelingService:
                 
             except Exception as e1:
                 # interpret_model often fails with PyCaret pipelines, this is expected
+                print(f"DEBUG: Method 1 (interpret_model) failed: {str(e1)}")
                 pass  # Silently continue to next method
                 
                 # 방법 2: PyCaret의 plot_model 시도
@@ -655,6 +714,7 @@ class ModelingService:
                             
                 except Exception as e2:
                     # plot_model also often fails with pipelines, expected
+                    print(f"DEBUG: Method 2 (plot_model) failed: {str(e2)}")
                     pass
                     
                     # 방법 3: 직접 모델 속성 접근
@@ -666,14 +726,18 @@ class ModelingService:
                         # Pipeline에서 실제 모델 추출
                         actual_model = model
                         if hasattr(model, 'steps'):
-                            # Pipeline인 경우
-                            for name, step in model.steps:
-                                if hasattr(step, 'feature_importances_') or hasattr(step, 'coef_'):
-                                    actual_model = step
-                                    break
+                            # Pipeline인 경우 - 마지막 단계가 실제 모델
+                            actual_model = model.steps[-1][1] if model.steps else model
+                            print(f"DEBUG: Extracted model from pipeline: {type(actual_model).__name__}")
+                        
+                        # 중첩된 Pipeline 처리
+                        if hasattr(actual_model, 'steps'):
+                            actual_model = actual_model.steps[-1][1] if actual_model.steps else actual_model
+                            print(f"DEBUG: Extracted model from nested pipeline: {type(actual_model).__name__}")
                         
                         if hasattr(actual_model, 'feature_importances_'):
                             importances = actual_model.feature_importances_
+                            print(f"DEBUG: Found feature_importances_ with {len(importances)} features")
                             for i, importance in enumerate(importances):
                                 if i < len(feature_names):
                                     importance_list.append({
@@ -685,6 +749,7 @@ class ModelingService:
                             coefs = actual_model.coef_
                             if len(coefs.shape) > 1:
                                 coefs = coefs[0]
+                            print(f"DEBUG: Found coef_ with {len(coefs)} coefficients")
                             for i, coef in enumerate(coefs):
                                 if i < len(feature_names):
                                     importance_list.append({
@@ -695,38 +760,12 @@ class ModelingService:
                                     
                     except Exception as e3:
                         # Direct access might fail too, continue to fallback
+                        print(f"DEBUG: Method 3 (direct access) failed: {str(e3)}")
                         pass
                         
-                        # 방법 4: 더미 데이터 생성 (최후의 수단)
-                        try:
-                            from pycaret.regression import get_config
-                            X_train = get_config('X_train')
-                            feature_names = X_train.columns.tolist()
-                            
-                            # 주요 경제 지표들을 우선순위로 설정
-                            priority_features = [
-                                'cpi_us', 'cpi_kr', 'major_group_rate', 'revenue_growth',
-                                'gdp_growth_kr', 'unemployment_kr', 'kospi_index',
-                                'exchange_rate', 'oil_price', 'interest_rate'
-                            ]
-                            
-                            # Feature importance를 시뮬레이션
-                            for i, feature in enumerate(feature_names):
-                                if feature in priority_features:
-                                    # 우선순위 feature는 높은 중요도
-                                    importance = 0.05 + (0.15 * (1 - priority_features.index(feature) / len(priority_features)))
-                                else:
-                                    # 나머지는 낮은 중요도
-                                    importance = 0.01 * (1 - i / len(feature_names))
-                                
-                                importance_list.append({
-                                    'feature': feature,
-                                    'importance': float(importance),
-                                    'rank': 0
-                                })
-                                
-                        except Exception as e4:
-                            logging.error(f"Fallback feature importance generation failed: {str(e4)}")
+                        # 실제 모델 속성에서 가져올 수 없으면 빈 리스트 반환
+                        print("WARNING: Could not extract feature importance from model")
+                        pass
                             
         finally:
             sys.stdout = old_stdout

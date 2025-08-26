@@ -24,6 +24,7 @@ async def setup_modeling(request: ModelingSetupRequest) -> Dict[str, Any]:
     """
     PyCaret 모델링 환경 설정
     """
+    print(f"\n🔍 Setup Request: target={request.target_column}, train_size={request.train_size}, session_id={request.session_id}")
     try:
         # PyCaret 사용 가능 여부 확인
         if not modeling_service.check_pycaret_availability():
@@ -60,8 +61,15 @@ async def compare_models(n_select: int = Query(default=3, ge=1, le=10)) -> Dict[
     """
     여러 ML 모델 비교 (데이터 크기에 적응적)
     """
+    print(f"\n🔍 Compare Models: n_select={n_select}")
     try:
         result = modeling_service.compare_models_adaptive(n_select=n_select)
+        
+        # 상위 3개 모델 출력
+        if 'comparison_results' in result and result['comparison_results']:
+            print(f"🏆 Top 3 Models:")
+            for i, model in enumerate(result['comparison_results'][:3], 1):
+                print(f"   {i}. {model.get('Model', 'N/A')}: R2={model.get('R2', 'N/A')}")
         
         return {
             **result,

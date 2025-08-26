@@ -138,13 +138,14 @@ def train_both_models():
             continue
         
         data = response.json()
-        results[model_name] = {
+        model_type = 'Base-up' if 'bu' in target_column else 'Performance'
+        results[model_type] = {
             'model': best_model,
             'metrics': best_metrics if best_metrics else data.get('metrics', {}),
             'target': target_column
         }
         
-        print(f"\n  [Training Complete: {model_name}]")
+        print(f"\n  [Training Complete: {model_type}]")
         print(f"    Final Performance:")
         print(f"      Algorithm: {best_model.upper()}")
         print(f"      MAE:       {best_metrics.get('MAE', 'N/A')}")
@@ -161,7 +162,7 @@ def train_both_models():
         print(f"│ {'Model':<15} │ {'Target Variable':<25} │ {'Algorithm':<10} │ {'R2 Score':<10} │")
         print("─" * 80)
         
-        for model_name, info in results.items():
+        for model_type, info in results.items():
             target = info.get('target', 'N/A')[:25]
             algorithm = info['model'].upper()[:10]
             
@@ -171,7 +172,7 @@ def train_both_models():
             else:
                 r2_str = 'N/A'
                 
-            print(f"│ {model_name:<15} │ {target:<25} │ {algorithm:<10} │ {r2_str:<10} │")
+            print(f"│ {model_type:<15} │ {target:<25} │ {algorithm:<10} │ {r2_str:<10} │")
         
         print("─" * 80)
     
