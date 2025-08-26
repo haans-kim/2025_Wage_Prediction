@@ -203,10 +203,13 @@ class AnalysisService:
                     # 래핑된 예측 함수 사용
                     explainer = shap.KernelExplainer(model_predict_wrapper, background_data)
                     
-                    n_samples = min(10, len(analysis_data))
+                    # Use more samples for better SHAP values
+                    n_samples = min(50, len(analysis_data))  # Increase samples
                     sample_indices = rng.choice(len(analysis_data), n_samples, replace=False)
                     analysis_sample = analysis_data[sample_indices]
-                    shap_values = explainer.shap_values(analysis_sample)
+                    
+                    print(f"📊 Computing SHAP values for {n_samples} samples...")
+                    shap_values = explainer.shap_values(analysis_sample, nsamples='auto')  # Let SHAP determine samples
                     
             except Exception as e:
                 print(f"⚠️ SHAP TreeExplainer failed, using KernelExplainer: {e}")
@@ -246,10 +249,11 @@ class AnalysisService:
                     
                     explainer = shap.KernelExplainer(safe_predict, background_data)
                     
-                    n_samples = min(5, len(analysis_data))
+                    n_samples = min(20, len(analysis_data))  # Increased samples
                     sample_indices = rng.choice(len(analysis_data), n_samples, replace=False)
                     analysis_sample = analysis_data[sample_indices]
-                    shap_values = explainer.shap_values(analysis_sample)
+                    print(f"📊 Computing SHAP values (fallback) for {n_samples} samples...")
+                    shap_values = explainer.shap_values(analysis_sample, nsamples='auto')
                     
                 except Exception as inner_e:
                     print(f"⚠️ KernelExplainer also failed: {inner_e}")

@@ -33,7 +33,8 @@ class ModelingService:
         self.current_target = None  # 현재 타겟 컬럼
         
         # 데이터 크기에 따른 모델 선택
-        self.small_data_models = ['lr', 'ridge', 'lasso', 'en', 'dt']
+        # PDF 분석 결과를 반영하여 Random Forest를 소규모 데이터에도 포함
+        self.small_data_models = ['lr', 'ridge', 'lasso', 'en', 'dt', 'rf']
         self.medium_data_models = ['lr', 'ridge', 'lasso', 'en', 'dt', 'rf', 'gbr']
         self.large_data_models = ['lr', 'ridge', 'lasso', 'en', 'dt', 'rf', 'gbr', 'xgboost', 'lightgbm']
     
@@ -285,6 +286,14 @@ class ModelingService:
             
             # current_model 설정
             self.current_model = best_models[0] if best_models else None
+            
+            # 타겟에 따른 모델 저장
+            if self.current_target == 'wage_increase_bu_sbl':
+                self.baseup_model = self.current_model
+                print(f"✅ Base-up model saved: {type(self.current_model).__name__}")
+            elif self.current_target == 'wage_increase_mi_sbl':
+                self.performance_model = self.current_model
+                print(f"✅ Performance model saved: {type(self.current_model).__name__}")
             
         except Exception as e:
             # 실패 시 기본 선형 회귀 사용

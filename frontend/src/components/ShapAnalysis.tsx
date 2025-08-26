@@ -10,7 +10,7 @@ import {
   Legend,
   ArcElement
 } from 'chart.js';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Alert, AlertDescription } from './ui/alert';
 import { InfoIcon, TrendingUp, TrendingDown } from 'lucide-react';
@@ -27,11 +27,18 @@ ChartJS.register(
 );
 
 interface ShapData {
-  feature_names: string[];
-  shap_values: number[];
-  base_value: number;
-  prediction: number;
-  feature_importance: Record<string, number>;
+  available: boolean;
+  feature_importance: Array<{
+    feature: string;
+    importance: number;
+  }>;
+  sample_explanation?: any;
+  explainer_type: string;
+  n_features: number;
+  n_samples_analyzed: number;
+  target?: string;
+  message?: string;
+  error?: string;
 }
 
 interface ShapAnalysisProps {
@@ -78,13 +85,19 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
   };
 
   const renderShapChart = (data: ShapData, title: string, color: string) => {
+    // Filter out features with zero importance
+    const nonZeroFeatures = data.feature_importance.filter(f => Math.abs(f.importance) > 0.0001);
+    
+    // If no non-zero features, use top 10 features anyway
+    const featuresToShow = nonZeroFeatures.length > 0 ? nonZeroFeatures : data.feature_importance.slice(0, 10);
+    
     const chartData = {
-      labels: data.feature_names,
+      labels: featuresToShow.map(f => f.feature),
       datasets: [{
         label: '기여도 (%p)',
-        data: data.shap_values,
-        backgroundColor: data.shap_values.map(v => v > 0 ? color : '#EF4444'),
-        borderColor: data.shap_values.map(v => v > 0 ? color : '#EF4444'),
+        data: featuresToShow.map(f => f.importance),
+        backgroundColor: featuresToShow.map(f => f.importance > 0 ? color : '#EF4444'),
+        borderColor: featuresToShow.map(f => f.importance > 0 ? color : '#EF4444'),
         borderWidth: 1
       }]
     };
@@ -99,13 +112,13 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
         },
         title: {
           display: true,
-          text: `${title} - 예측값: ${(data.prediction * 100).toFixed(2)}%`
+          text: title
         },
         tooltip: {
           callbacks: {
             label: (context: any) => {
               const value = context.raw;
-              return `기여도: ${value > 0 ? '+' : ''}${(value * 100).toFixed(3)}%p`;
+              return `중요도: ${value > 0 ? '+' : ''}${(value * 100).toFixed(3)}%`;
             }
           }
         }
@@ -114,7 +127,7 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
         x: {
           title: {
             display: true,
-            text: '기여도 (%p)'
+            text: '중요도'
           }
         }
       }
@@ -128,14 +141,18 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
   };
 
   const renderImportancePie = (data: ShapData, title: string) => {
-    const sortedFeatures = Object.entries(data.feature_importance)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5);
+    // Filter out features with zero importance
+    const nonZeroFeatures = data.feature_importance.filter(f => Math.abs(f.importance) > 0.0001);
+    
+    // Sort and get top 5 features
+    const sortedFeatures = nonZeroFeatures.length > 0 
+      ? nonZeroFeatures.sort((a, b) => b.importance - a.importance).slice(0, 5)
+      : data.feature_importance.slice(0, 5);
 
     const pieData = {
-      labels: sortedFeatures.map(([name]) => name),
+      labels: sortedFeatures.map(f => f.feature),
       datasets: [{
-        data: sortedFeatures.map(([, value]) => value),
+        data: sortedFeatures.map(f => Math.abs(f.importance)),
         backgroundColor: [
           '#3B82F6',
           '#60A5FA',
@@ -206,62 +223,87 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
 
   if (modelType === 'both') {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            SHAP 분석 - 임금인상률 기여도
-            <div className="ml-auto">
-              <InfoIcon className="w-4 h-4 text-gray-400 cursor-help" />
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="baseup" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="baseup">Base-up 인상률</TabsTrigger>
-              <TabsTrigger value="performance">성과급 인상률</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="baseup" className="space-y-4">
-              {baseupShap && (
+      <>
+        <Card className={className}>
+          <CardHeader>
+            <CardTitle className="text-xl">
+              특성 중요도 분석
+            </CardTitle>
+            <CardDescription>
+              각 변수가 임금인상률 예측에 미치는 영향도
+            </CardDescription>
+          </CardHeader>
+        </Card>
+
+        {/* 2열 레이아웃으로 SHAP 분석 표시 */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* Base-up SHAP 분석 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg text-blue-600 dark:text-blue-400">
+                Base-up 특성 중요도
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {baseupShap && baseupShap.available ? (
                 <>
-                  {renderShapChart(baseupShap, 'Base-up 인상률', '#3B82F6')}
-                  <div className="mt-6">
-                    {renderImportancePie(baseupShap, 'Base-up')}
+                  <div style={{ height: '300px' }}>
+                    {renderShapChart(baseupShap, 'Base-up', '#3B82F6')}
                   </div>
-                  <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                    <h4 className="font-semibold text-blue-900 mb-2">주요 영향 요인</h4>
-                    <ul className="space-y-1 text-sm text-blue-800">
-                      <li>• 대기업 인상률이 가장 큰 영향 (상관계수 0.62)</li>
-                      <li>• 미국 CPI가 두 번째로 중요한 요인</li>
-                      <li>• 최저임금과 공공기관 인상률은 음의 영향</li>
+                  <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                    <h4 className="font-semibold text-blue-900 dark:text-blue-300 mb-2">핵심 인사이트</h4>
+                    <ul className="space-y-1 text-sm text-blue-800 dark:text-blue-200">
+                      <li>• 미국 CPI: 64.7%</li>
+                      <li>• 대기업 인상률: 23.7%</li>
+                      <li>• 한국 CPI: 11.6%</li>
                     </ul>
+                    <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                      글로벌 인플레이션이 핵심 동인
+                    </p>
                   </div>
                 </>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  SHAP 분석 데이터를 로딩 중...
+                </div>
               )}
-            </TabsContent>
-            
-            <TabsContent value="performance" className="space-y-4">
-              {performanceShap && (
+            </CardContent>
+          </Card>
+
+          {/* 성과급 SHAP 분석 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg text-green-600 dark:text-green-400">
+                성과급 특성 중요도
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {performanceShap && performanceShap.available ? (
                 <>
-                  {renderShapChart(performanceShap, '성과급 인상률', '#10B981')}
-                  <div className="mt-6">
-                    {renderImportancePie(performanceShap, '성과급')}
+                  <div style={{ height: '300px' }}>
+                    {renderShapChart(performanceShap, '성과급', '#10B981')}
                   </div>
-                  <div className="mt-4 p-4 bg-green-50 rounded-lg">
-                    <h4 className="font-semibold text-green-900 mb-2">주요 영향 요인</h4>
-                    <ul className="space-y-1 text-sm text-green-800">
-                      <li>• 매출 증가율이 압도적으로 중요 (상관계수 0.88)</li>
-                      <li>• 영업이익 증가율도 양의 영향</li>
-                      <li>• 그룹 BU 인상률은 음의 상관관계</li>
+                  <div className="mt-4 p-4 bg-green-50 dark:bg-green-950 rounded-lg">
+                    <h4 className="font-semibold text-green-900 dark:text-green-300 mb-2">핵심 인사이트</h4>
+                    <ul className="space-y-1 text-sm text-green-800 dark:text-green-200">
+                      <li>• 매출증가율: 계수 0.00196</li>
+                      <li>• 그룹 BU: 계수 0.00053</li>
+                      <li>• 대기업: 계수 0.00011</li>
                     </ul>
+                    <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                      회사 실적이 성과급의 핵심
+                    </p>
                   </div>
                 </>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  SHAP 분석 데이터를 로딩 중...
+                </div>
               )}
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </div>
+      </>
     );
   }
 

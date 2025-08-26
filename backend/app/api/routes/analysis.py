@@ -35,9 +35,10 @@ async def get_shap_analysis(
         result = analysis_service.get_shap_analysis(
             model=model,
             sample_index=sample_index,
-            top_n=top_n,
-            target=target
+            top_n=top_n
         )
+        # Target 정보를 결과에 추가
+        result['target'] = target
         
         return result
         
