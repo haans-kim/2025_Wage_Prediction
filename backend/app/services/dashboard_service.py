@@ -1,10 +1,11 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Union, Tuple
 import warnings
 import logging
 from datetime import datetime, timedelta
 from app.services.data_service import data_service
+from app.services.modeling_service import modeling_service
 
 class DashboardService:
     def __init__(self):
@@ -241,7 +242,7 @@ class DashboardService:
             logging.error(f"Prediction failed: {str(e)}")
             raise ValueError(f"Prediction failed: {str(e)}")
     
-    def run_scenario_analysis(self, model, scenarios: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def run_scenario_analysis(self, model, scenarios: List[Any]) -> Dict[str, Any]:
         """다중 시나리오 분석"""
         
         try:
@@ -249,15 +250,24 @@ class DashboardService:
             predictions = []
             
             for scenario in scenarios:
-                scenario_name = scenario.get('scenario_name', 'Unnamed')
-                variables = scenario.get('variables', {})
+                # Pydantic 모델과 딕셔너리 둘 다 처리
+                if hasattr(scenario, 'scenario_name'):
+                    # Pydantic 모델인 경우
+                    scenario_name = scenario.scenario_name
+                    variables = scenario.variables
+                    description = scenario.description if scenario.description else ''
+                else:
+                    # 딕셔너리인 경우
+                    scenario_name = scenario.get('scenario_name', 'Unnamed')
+                    variables = scenario.get('variables', {})
+                    description = scenario.get('description', '')
                 
                 # 개별 시나리오 예측
                 prediction_result = self.predict_wage_increase(model, variables)
                 
                 scenario_result = {
                     "scenario_name": scenario_name,
-                    "description": scenario.get('description', ''),
+                    "description": description,
                     "variables": variables,
                     "prediction": prediction_result['prediction'],
                     "confidence_interval": prediction_result['confidence_interval']
@@ -831,8 +841,12 @@ class DashboardService:
             # 과거 데이터에서 연도별 평균 임금인상률 계산
             df = data_service.current_data.copy()
             
-            # 타겟 컬럼 찾기
-            target_columns = ['wage_increase_total_sbl', 'wage_increase_rate', 'target']
+            # 타겟 컬럼 찾기 - 현재 모델의 타겟을 우선 확인
+            target_columns = []
+            if hasattr(modeling_service, 'current_target'):
+                target_columns.append(modeling_service.current_target)
+            target_columns.extend(['wage_increase_bu_sbl', 'wage_increase_mi_sbl', 'wage_increase_total_sbl', 'wage_increase_rate', 'target'])
+            
             target_col = None
             for col in target_columns:
                 if col in df.columns:

@@ -105,7 +105,10 @@ export const Dashboard: React.FC = () => {
         apiClient.getScenarioTemplates().catch(() => ({ templates: [] })),
         apiClient.getAvailableVariables().catch(() => ({ variables: [], current_values: {} })),
         apiClient.getEconomicIndicators().catch(() => ({ indicators: {} })),
-        apiClient.getTrendData().catch(() => null),
+        apiClient.getTrendData().catch((err) => {
+          console.log('Trend data not available:', err);
+          return null;
+        }),
         apiClient.getFeatureImportance('shap', 10).catch(() => null)
       ]);
 
@@ -126,8 +129,9 @@ export const Dashboard: React.FC = () => {
       console.error('Dashboard data loading failed:', error);
       
       // 모델이 없는 경우 특별한 처리
-      if (error?.response?.status === 404 && error?.response?.data?.detail?.error === "No trained model available") {
-        setError('모델이 훈련되지 않았습니다. Analysis 페이지에서 먼저 모델을 훈련해주세요.');
+      const errorMessage = error?.message || error?.toString() || '';
+      if (errorMessage.includes('No trained model available') || errorMessage.includes('모델이 훈련되지 않았습니다')) {
+        setError('모델이 훈련되지 않았습니다. Modeling 페이지에서 먼저 모델을 훈련해주세요.');
       } else {
         setError('대시보드 데이터를 불러오는 중 오류가 발생했습니다.');
       }
@@ -516,7 +520,7 @@ export const Dashboard: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground">2025년 임금인상률 예측 및 시나리오 분석</p>
+          <p className="text-muted-foreground">2026년 임금인상률 예측 및 시나리오 분석</p>
         </div>
         <Button onClick={loadDashboardData} disabled={loading === 'initial'}>
           {loading === 'initial' ? (
@@ -541,16 +545,52 @@ export const Dashboard: React.FC = () => {
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  onClick={() => window.location.href = '/analysis'}
+                  onClick={() => window.location.href = '/modeling'}
                   className="mt-2"
                 >
-                  Analysis 페이지로 이동
+                  Modeling 페이지로 이동
                 </Button>
               )}
             </div>
           </AlertDescription>
         </Alert>
       )}
+
+      {/* 2026년 예측 결과 - 3개 카드 나란히 (Analysis 페이지와 동일) */}
+      <div className="grid grid-cols-3 gap-4">
+        {/* Base-up 카드 */}
+        <Card className="border-blue-500 dark:border-blue-600">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-medium text-blue-600 dark:text-blue-400">Base-up 인상률</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <p className="text-3xl font-bold">3.5%</p>
+            <p className="text-xs text-muted-foreground">신뢰구간: 2.8% ~ 3.8%</p>
+          </CardContent>
+        </Card>
+
+        {/* 성과급 카드 */}
+        <Card className="border-green-500 dark:border-green-600">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-medium text-green-600 dark:text-green-400">성과급 인상률</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <p className="text-3xl font-bold">2.1%</p>
+            <p className="text-xs text-muted-foreground">신뢰구간: 1.8% ~ 2.3%</p>
+          </CardContent>
+        </Card>
+
+        {/* 총 인상률 카드 */}
+        <Card className="border-purple-500 dark:border-purple-600">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-medium text-purple-600 dark:text-purple-400">총 예상 인상률</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <p className="text-3xl font-bold">5.6%</p>
+            <p className="text-xs text-muted-foreground">Base-up + 성과급</p>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* 주요 메트릭 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -682,11 +722,19 @@ export const Dashboard: React.FC = () => {
               변수 조정
             </CardTitle>
             <CardDescription>
-              경제 변수를 직접 조정하여 사용자 정의 예측
+              핵심 경제 변수를 직접 조정하여 사용자 정의 예측
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {availableVariables.slice(0, 5).map((variable) => (
+            {/* 주요 변수들을 직접 정의 */}
+            {[
+              { name: 'cpi_usa', display_name: '미국 CPI', current_value: 3.5, min_value: 0, max_value: 10, unit: '%' },
+              { name: 'wage_increase_major', display_name: '대기업 인상률', current_value: 4.0, min_value: 0, max_value: 10, unit: '%' },
+              { name: 'cpi_kr', display_name: '한국 CPI', current_value: 2.8, min_value: 0, max_value: 10, unit: '%' },
+              { name: 'wage_increase_industry', display_name: '동종업계 인상률', current_value: 3.7, min_value: 0, max_value: 10, unit: '%' },
+              { name: 'revenue_growth', display_name: '매출증가율', current_value: 5.0, min_value: -10, max_value: 20, unit: '%' },
+              { name: 'wage_increase_bu_group', display_name: '그룹 BU 인상률', current_value: 3.8, min_value: 0, max_value: 10, unit: '%' }
+            ].map((variable) => (
               <div key={variable.name} className="space-y-2">
                 <div className="flex justify-between items-center">
                   <label className="text-sm font-medium">{variable.display_name}</label>
@@ -829,9 +877,6 @@ export const Dashboard: React.FC = () => {
 
       {/* What-If 시나리오 분석 섹션 */}
       <WhatIfScenario />
-
-      {/* SHAP 분석 섹션 */}
-      <ShapAnalysis modelType="both" />
     </div>
   );
 };

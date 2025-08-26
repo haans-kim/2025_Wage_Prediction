@@ -150,7 +150,7 @@ export const Analysis: React.FC = () => {
       {/* 2026년 예측 결과 - 3개 카드 나란히 */}
       <div className="grid grid-cols-3 gap-4">
         {/* Base-up 카드 */}
-        <Card className="border-blue-200 dark:border-blue-800">
+        <Card className="border-blue-500 dark:border-blue-600">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-medium text-blue-600 dark:text-blue-400">Base-up 인상률</CardTitle>
           </CardHeader>
@@ -161,7 +161,7 @@ export const Analysis: React.FC = () => {
         </Card>
 
         {/* 성과급 카드 */}
-        <Card className="border-green-200 dark:border-green-800">
+        <Card className="border-green-500 dark:border-green-600">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-medium text-green-600 dark:text-green-400">성과급 인상률</CardTitle>
           </CardHeader>
@@ -172,7 +172,7 @@ export const Analysis: React.FC = () => {
         </Card>
 
         {/* 총 인상률 카드 */}
-        <Card className="border-purple-200 dark:border-purple-800">
+        <Card className="border-purple-500 dark:border-purple-600">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-medium text-purple-600 dark:text-purple-400">총 예상 인상률</CardTitle>
           </CardHeader>
