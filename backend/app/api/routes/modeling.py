@@ -437,3 +437,39 @@ async def predict_with_adjustments(request: FeatureAdjustmentRequest) -> Dict[st
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to predict with adjustments: {str(e)}")
+
+@router.post("/save-models")
+async def save_models() -> Dict[str, Any]:
+    """
+    학습된 모델을 파일로 저장
+    """
+    try:
+        result = modeling_service.save_models()
+        
+        if 'error' in result:
+            raise HTTPException(status_code=500, detail=result['error'])
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save models: {str(e)}")
+
+@router.post("/load-models")
+async def load_models() -> Dict[str, Any]:
+    """
+    저장된 모델을 파일에서 로드
+    """
+    try:
+        result = modeling_service.load_saved_models()
+        
+        if 'error' in result:
+            raise HTTPException(status_code=500, detail=result['error'])
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load models: {str(e)}")

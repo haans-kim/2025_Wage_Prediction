@@ -4,6 +4,8 @@ from typing import Dict, Any, List, Optional, Tuple
 import warnings
 import io
 import sys
+import os
+import pickle
 from contextlib import redirect_stdout, redirect_stderr
 import logging
 
@@ -42,6 +44,18 @@ class ModelingService:
         self.small_data_models = ['lr', 'ridge', 'lasso', 'en', 'dt', 'rf']
         self.medium_data_models = ['lr', 'ridge', 'lasso', 'en', 'dt', 'rf', 'gbr']
         self.large_data_models = ['lr', 'ridge', 'lasso', 'en', 'dt', 'rf', 'gbr', 'xgboost', 'lightgbm']
+        
+        # 모델 저장 경로
+        self.model_dir = "saved_models"
+        self.baseup_model_path = os.path.join(self.model_dir, "baseup_model.pkl")
+        self.performance_model_path = os.path.join(self.model_dir, "performance_model.pkl")
+        
+        # 서버 시작 시 저장된 모델 자동 로드
+        print("\n" + "=" * 80)
+        print("🚀 INITIALIZING MODEL SERVICE")
+        print("=" * 80)
+        self.load_saved_models()
+        print("=" * 80 + "\n")
     
     def check_pycaret_availability(self) -> bool:
         """PyCaret 사용 가능 여부 확인"""
@@ -788,6 +802,115 @@ class ModelingService:
             return self.performance_feature_importance or []
         else:
             return self.current_feature_importance or []
+
+    def save_models(self):
+        """학습된 모델을 파일로 저장"""
+        try:
+            # 저장 디렉토리 생성
+            if not os.path.exists(self.model_dir):
+                os.makedirs(self.model_dir)
+                print(f"📁 Created model directory: {self.model_dir}")
+            
+            # Base-up 모델 저장
+            if self.baseup_model is not None:
+                with open(self.baseup_model_path, 'wb') as f:
+                    pickle.dump({
+                        'model': self.baseup_model,
+                        'feature_importance': self.baseup_feature_importance,
+                        'target': 'wage_increase_bu_sbl'
+                    }, f)
+                print(f"💾 Base-up model saved to {self.baseup_model_path}")
+            
+            # Performance 모델 저장
+            if self.performance_model is not None:
+                with open(self.performance_model_path, 'wb') as f:
+                    pickle.dump({
+                        'model': self.performance_model,
+                        'feature_importance': self.performance_feature_importance,
+                        'target': 'wage_increase_mi_sbl'
+                    }, f)
+                print(f"💾 Performance model saved to {self.performance_model_path}")
+            
+            # Current model도 저장 (현재 활성 모델)
+            if self.current_model is not None:
+                current_model_path = os.path.join(self.model_dir, "current_model.pkl")
+                with open(current_model_path, 'wb') as f:
+                    pickle.dump({
+                        'model': self.current_model,
+                        'feature_importance': self.current_feature_importance,
+                        'target': self.current_target
+                    }, f)
+                print(f"💾 Current model saved to {current_model_path}")
+            
+            return {
+                "message": "Models saved successfully",
+                "baseup_saved": self.baseup_model is not None,
+                "performance_saved": self.performance_model is not None,
+                "current_saved": self.current_model is not None
+            }
+            
+        except Exception as e:
+            print(f"❌ Error saving models: {str(e)}")
+            return {
+                "error": f"Failed to save models: {str(e)}"
+            }
+    
+    def load_saved_models(self):
+        """저장된 모델을 파일에서 로드"""
+        try:
+            models_loaded = []
+            
+            # Base-up 모델 로드
+            if os.path.exists(self.baseup_model_path):
+                with open(self.baseup_model_path, 'rb') as f:
+                    data = pickle.load(f)
+                    self.baseup_model = data['model']
+                    self.baseup_feature_importance = data.get('feature_importance', [])
+                    models_loaded.append('baseup')
+                print(f"✅ Base-up model loaded from {self.baseup_model_path}")
+            
+            # Performance 모델 로드
+            if os.path.exists(self.performance_model_path):
+                with open(self.performance_model_path, 'rb') as f:
+                    data = pickle.load(f)
+                    self.performance_model = data['model']
+                    self.performance_feature_importance = data.get('feature_importance', [])
+                    models_loaded.append('performance')
+                print(f"✅ Performance model loaded from {self.performance_model_path}")
+            
+            # Current model 로드
+            current_model_path = os.path.join(self.model_dir, "current_model.pkl")
+            if os.path.exists(current_model_path):
+                with open(current_model_path, 'rb') as f:
+                    data = pickle.load(f)
+                    self.current_model = data['model']
+                    self.current_feature_importance = data.get('feature_importance', [])
+                    self.current_target = data.get('target')
+                    models_loaded.append('current')
+                print(f"✅ Current model loaded from {current_model_path}")
+            
+            # 로드된 모델이 있으면 설정 완료 플래그 설정
+            if models_loaded:
+                self.is_setup_complete = True
+                self.is_model_trained_individually = True
+                print(f"🚀 Successfully loaded {len(models_loaded)} model(s): {', '.join(models_loaded)}")
+            else:
+                print("ℹ️ No saved models found. Please train models first.")
+            
+            return {
+                "message": f"Loaded {len(models_loaded)} model(s)",
+                "models_loaded": models_loaded,
+                "ready": len(models_loaded) > 0
+            }
+            
+        except Exception as e:
+            print(f"⚠️ Error loading models: {str(e)}")
+            print("ℹ️ Models will need to be retrained.")
+            return {
+                "error": f"Failed to load models: {str(e)}",
+                "models_loaded": [],
+                "ready": False
+            }
 
 # 싱글톤 인스턴스
 modeling_service = ModelingService()

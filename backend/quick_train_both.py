@@ -180,11 +180,30 @@ def train_both_models():
         print("\n" + "─" * 80)
         print("STATUS: SUCCESS - Both models trained successfully")
         print("─" * 80)
+        
+        # 모델을 파일로 저장 (API 호출)
+        print("\n" + "─" * 80)
+        print("SAVING MODELS TO DISK")
+        print("─" * 80)
+        response = requests.post(f"{BASE_URL}/api/modeling/save-models")
+        if response.status_code == 200:
+            save_result = response.json()
+            if 'error' not in save_result:
+                print("✅ Models saved successfully to 'saved_models' directory")
+                print("   - baseup_model.pkl")
+                print("   - performance_model.pkl")
+                print("   - current_model.pkl")
+            else:
+                print(f"⚠️ Warning: {save_result.get('error', 'Unknown error')}")
+        else:
+            print(f"⚠️ Warning: Failed to save models - {response.text}")
+        
         print("\nUSAGE:")
         print("  1. Base-up Model:      Target = wage_increase_bu_sbl")
         print("  2. Performance Model:  Target = wage_increase_mi_sbl")
         print("  3. Total Increase:     Base-up + Performance")
         print("\nNOTE: Feature importance data is now available for Dashboard simulations")
+        print("\n📁 Models are automatically loaded when server starts")
     else:
         print(f"\nWARNING: Only {len(results)}/2 models were trained successfully")
 

@@ -104,9 +104,17 @@ class DashboardService:
         try:
             # 현재 데이터의 컬럼 구조 파악
             if data_service.current_data is not None:
-                # 타겟 컬럼과 year 컬럼 제외한 피처 컬럼들 
+                # 모든 컬럼을 포함하되, year와 매우 특수한 컬럼만 제외
+                # wage_increase_bu_sbl과 wage_increase_mi_sbl은 반드시 포함
+                exclude_columns = ['year']
                 feature_columns = [col for col in data_service.current_data.columns 
-                                 if col not in ['target', 'wage_increase_rate', 'wage_increase_total_sbl', 'year']]
+                                 if col not in exclude_columns]
+                
+                # wage_increase 컬럼들이 포함되었는지 확인
+                if 'wage_increase_bu_sbl' not in feature_columns:
+                    feature_columns.append('wage_increase_bu_sbl')
+                if 'wage_increase_mi_sbl' not in feature_columns:
+                    feature_columns.append('wage_increase_mi_sbl')
                 
                 # 변수 매핑: Dashboard 변수 → 실제 데이터 컬럼 (퍼센트를 소수점으로 변환)
                 variable_mapping = {
@@ -150,7 +158,17 @@ class DashboardService:
                             input_data[col] = 0.0
                 
                 print(f"📊 Model input prepared with {len(input_data)} features")
-                return pd.DataFrame([input_data])
+                print(f"📊 Feature columns included: {list(input_data.keys())[:10]}...")
+                
+                result_df = pd.DataFrame([input_data])
+                print(f"📊 DataFrame columns: {list(result_df.columns)[:10]}...")
+                print(f"📊 DataFrame shape: {result_df.shape}")
+                
+                # wage_increase 컬럼들이 있는지 확인
+                wage_cols = [col for col in result_df.columns if 'wage_increase' in col]
+                print(f"📊 Wage increase columns in DataFrame: {wage_cols}")
+                
+                return result_df
                 
         except Exception as e:
             logging.error(f"Error preparing model input: {str(e)}")
