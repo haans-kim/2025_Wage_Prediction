@@ -12,6 +12,7 @@ import {
   Legend,
   Filler
 } from 'chart.js';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
@@ -33,7 +34,6 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../lib/api';
 import { ShapAnalysis } from '../components/ShapAnalysis';
-import { WhatIfScenario } from '../components/WhatIfScenario';
 
 // Chart.js 구성 요소 등록
 ChartJS.register(
@@ -45,7 +45,8 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  Filler
+  Filler,
+  ChartDataLabels
 );
 
 interface ScenarioTemplate {
@@ -322,67 +323,69 @@ export const Dashboard: React.FC = () => {
   };
 
   const getChartData = () => {
-    if (!trendData || !trendData.trend_data) return null;
-
-    const historicalData = trendData.trend_data.filter((d: any) => d.type === 'historical');
-    const predictionData = trendData.trend_data.filter((d: any) => d.type === 'prediction');
-
-    const labels = trendData.trend_data.map((d: any) => d.year);
-    const values = trendData.trend_data.map((d: any) => d.value);
+    // 2019-2026년 데이터 (2026은 예측)
+    const years = ['2019', '2020', '2021', '2022', '2023', '2024', '2025', '2026'];
     
-    // 신뢰구간 데이터 (예측 데이터만)
-    const confidenceLower = trendData.trend_data.map((d: any) => 
-      d.type === 'prediction' ? d.confidence_lower : d.value
-    );
-    const confidenceUpper = trendData.trend_data.map((d: any) => 
-      d.type === 'prediction' ? d.confidence_upper : d.value
-    );
-
+    // 실제 과거 데이터와 예측 (예시 데이터 - 실제로는 API에서 가져와야 함)
+    const performanceData = [1.5, 1.2, 1.8, 2.1, 2.3, 2.0, 2.2, 2.1]; // 성과급
+    const baseupData = [2.5, 2.0, 2.8, 3.2, 3.5, 3.3, 3.4, 3.5]; // Base-up
+    
+    // 합계를 계산
+    const totalData = performanceData.map((perf, i) => perf + baseupData[i]);
+    
     return {
-      labels,
+      labels: years,
       datasets: [
         {
-          label: '과거 임금인상률',
-          data: values.map((v: number, i: number) => 
-            trendData.trend_data[i].type === 'historical' ? v : null
-          ),
-          borderColor: 'rgb(59, 130, 246)',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          tension: 0.1,
-          pointRadius: 4,
-          pointHoverRadius: 6,
+          label: '총 인상률',
+          data: totalData,
+          borderColor: 'rgb(168, 85, 247)', // 보라색
+          backgroundColor: 'rgba(168, 85, 247, 0.15)',
+          borderWidth: 2.5,
+          tension: 0.4, // Bezier curve smoothing
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: 'rgb(168, 85, 247)',
+          pointBorderColor: 'rgb(168, 85, 247)',
+          pointBorderWidth: 1,
+          fill: true,
+          segment: {
+            borderDash: (ctx: any) => ctx.p0DataIndex >= 6 ? [5, 5] : undefined, // 2026 예측 점선
+          },
         },
         {
-          label: '2025년 예측',
-          data: values.map((v: number, i: number) => 
-            trendData.trend_data[i].type === 'prediction' ? v : null
-          ),
-          borderColor: 'rgb(239, 68, 68)',
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          borderDash: [5, 5],
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointStyle: 'star',
+          label: 'Base-up',
+          data: baseupData,
+          borderColor: 'rgb(59, 130, 246)', // 파란색
+          backgroundColor: 'rgba(59, 130, 246, 0.15)',
+          borderWidth: 2.5,
+          tension: 0.4, // Bezier curve smoothing
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: 'rgb(59, 130, 246)',
+          pointBorderColor: 'rgb(59, 130, 246)',
+          pointBorderWidth: 1,
+          fill: true,
+          segment: {
+            borderDash: (ctx: any) => ctx.p0DataIndex >= 6 ? [5, 5] : undefined, // 2026 예측 점선
+          },
         },
         {
-          label: '신뢰구간 (상한)',
-          data: confidenceUpper,
-          borderColor: 'rgba(239, 68, 68, 0.3)',
-          backgroundColor: 'rgba(239, 68, 68, 0.05)',
-          fill: '+1',
-          borderWidth: 1,
-          pointRadius: 0,
-          hidden: false,
-        },
-        {
-          label: '신뢰구간 (하한)',
-          data: confidenceLower,
-          borderColor: 'rgba(239, 68, 68, 0.3)',
-          backgroundColor: 'rgba(239, 68, 68, 0.05)',
-          fill: false,
-          borderWidth: 1,
-          pointRadius: 0,
-          hidden: false,
+          label: '성과급',
+          data: performanceData,
+          borderColor: 'rgb(34, 197, 94)', // 녹색
+          backgroundColor: 'rgba(34, 197, 94, 0.15)',
+          borderWidth: 2.5,
+          tension: 0.4, // Bezier curve smoothing
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: 'rgb(34, 197, 94)',
+          pointBorderColor: 'rgb(34, 197, 94)',
+          pointBorderWidth: 1,
+          fill: true,
+          segment: {
+            borderDash: (ctx: any) => ctx.p0DataIndex >= 6 ? [5, 5] : undefined, // 2026 예측 점선
+          },
         }
       ]
     };
@@ -391,56 +394,86 @@ export const Dashboard: React.FC = () => {
   const getChartOptions = () => ({
     responsive: true,
     maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-        labels: {
-          filter: (item: any) => !item.text.includes('신뢰구간')
-        }
-      },
-      title: {
-        display: true,
-        text: '임금인상률 추이 및 2025년 예측',
-        font: {
-          size: 16,
-          weight: 'bold' as const
-        }
-      },
-      tooltip: {
-        callbacks: {
-          label: (context: any) => {
-            if (context.dataset.label?.includes('신뢰구간')) return;
-            const value = context.parsed.y;
-            const isHistorical = trendData.trend_data[context.dataIndex]?.type === 'historical';
-            const label = isHistorical ? '과거 실적' : '예측값';
-            return `${label}: ${value.toFixed(1)}%`;
-          },
-          afterLabel: (context: any) => {
-            const dataPoint = trendData.trend_data[context.dataIndex];
-            if (dataPoint?.type === 'prediction') {
-              return `신뢰구간: ${dataPoint.confidence_lower.toFixed(1)}% - ${dataPoint.confidence_upper.toFixed(1)}%`;
-            }
-            return;
-          }
-        }
-      }
-    },
     scales: {
-      y: {
-        beginAtZero: false,
+      x: {
+        grid: {
+          display: false
+        },
         title: {
           display: true,
-          text: '임금인상률 (%)'
+          text: '연도',
+          font: {
+            size: 14,
+            weight: 'bold' as const
+          }
+        }
+      },
+      y: {
+        beginAtZero: true,
+        max: 7,
+        title: {
+          display: true,
+          text: '인상률 (%)',
+          font: {
+            size: 14,
+            weight: 'bold' as const
+          }
         },
         ticks: {
           callback: (value: any) => `${value}%`
         }
-      },
-      x: {
-        title: {
-          display: true,
-          text: '연도'
+      }
+    },
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        labels: {
+          filter: (item: any) => !item.text.includes('신뢰구간'),
+          padding: 20,
+          font: {
+            size: 13
+          },
+          usePointStyle: true,
+          pointStyle: 'circle'
         }
+      },
+      title: {
+        display: true,
+        text: '임금인상률 추이 및 2026년 예측',
+        font: {
+          size: 16,
+          weight: 'bold' as const
+        },
+        padding: 20
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            return `${label}: ${value.toFixed(1)}%`;
+          }
+        }
+      },
+      datalabels: {
+        display: true,
+        color: (context: any) => {
+          const datasetColors = [
+            'rgb(168, 85, 247)',  // 총 인상률
+            'rgb(59, 130, 246)',  // Base-up
+            'rgb(34, 197, 94)'    // 성과급
+          ];
+          return datasetColors[context.datasetIndex];
+        },
+        font: {
+          weight: 'bold' as const,
+          size: 10
+        },
+        formatter: (value: number) => value.toFixed(1),
+        anchor: 'end' as const,
+        align: 'top' as const,
+        offset: 3,
+        clip: false
       }
     },
     interaction: {
@@ -591,6 +624,9 @@ export const Dashboard: React.FC = () => {
             return `기여도: ${sign}${value.toFixed(2)}%p`;
           }
         }
+      },
+      datalabels: {
+        display: false // Bar chart에서는 datalabels 비활성화
       }
     },
     scales: {
@@ -676,22 +712,21 @@ export const Dashboard: React.FC = () => {
         {/* Base-up 카드 */}
         <Card className="border-blue-500 dark:border-blue-600">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-medium text-blue-600 dark:text-blue-400">Base-up 인상률</CardTitle>
+            <CardTitle className="text-base font-medium text-blue-600 dark:text-blue-400">2026 Base-up 인상률</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
             <p className="text-3xl font-bold">3.5%</p>
-            <p className="text-xs text-muted-foreground">신뢰구간: 2.8% ~ 3.8%</p>
+
           </CardContent>
         </Card>
 
         {/* 성과급 카드 */}
         <Card className="border-green-500 dark:border-green-600">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-medium text-green-600 dark:text-green-400">성과급 인상률</CardTitle>
+            <CardTitle className="text-base font-medium text-green-600 dark:text-green-400">2026 성과급 인상률</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
             <p className="text-3xl font-bold">2.1%</p>
-            <p className="text-xs text-muted-foreground">신뢰구간: 1.8% ~ 2.3%</p>
           </CardContent>
         </Card>
 
@@ -709,68 +744,66 @@ export const Dashboard: React.FC = () => {
 
       {/* 주요 메트릭 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* 현재 예측 */}
+        {/* 최저임금 인상률 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">2025년 예측</CardTitle>
+            <CardTitle className="text-sm font-medium">최저임금 인상률</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-primary">
-              {currentPrediction ? `${formatPrediction(currentPrediction.prediction)}%` : '-.-%'}
+              5.0%
             </div>
             <p className="text-xs text-muted-foreground">
-              {currentPrediction && (
-                `구간: ${formatPrediction(currentPrediction.confidence_interval[0])}% - ${formatPrediction(currentPrediction.confidence_interval[1])}%`
-              )}
+              2026년 예상
             </p>
           </CardContent>
         </Card>
 
-        {/* GDP 성장률 */}
+        {/* 원/달러 환율 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">GDP 성장률</CardTitle>
+            <CardTitle className="text-sm font-medium">원/달러 환율</CardTitle>
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {economicIndicators.gdp_growth ? `${economicIndicators.gdp_growth.value}%` : '-.-%'}
+              ₩1,380
             </div>
-            <p className={`text-xs ${getStatusColor(economicIndicators.gdp_growth?.status || '')}`}>
-              {economicIndicators.gdp_growth?.change || ''}
+            <p className="text-xs text-muted-foreground">
+              +3.5% 전년 대비
             </p>
           </CardContent>
         </Card>
 
-        {/* 인플레이션율 */}
+        {/* 삼바 매출 성장률 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">인플레이션율</CardTitle>
+            <CardTitle className="text-sm font-medium">삼바 매출 성장률</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {economicIndicators.inflation_rate ? `${economicIndicators.inflation_rate.value}%` : '-.-%'}
+              15.2%
             </div>
-            <p className={`text-xs ${getStatusColor(economicIndicators.inflation_rate?.status || '')}`}>
-              {economicIndicators.inflation_rate?.change || ''}
+            <p className="text-xs text-muted-foreground">
+              2025년 예상
             </p>
           </CardContent>
         </Card>
 
-        {/* 실업률 */}
+        {/* 동종업계 평균 인상률 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">실업률</CardTitle>
+            <CardTitle className="text-sm font-medium">동종업계 평균</CardTitle>
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {economicIndicators.unemployment_rate ? `${economicIndicators.unemployment_rate.value}%` : '-.-%'}
+              4.5%
             </div>
-            <p className={`text-xs ${getStatusColor(economicIndicators.unemployment_rate?.status || '')}`}>
-              {economicIndicators.unemployment_rate?.change || ''}
+            <p className="text-xs text-muted-foreground">
+              임금 인상률
             </p>
           </CardContent>
         </Card>
@@ -990,15 +1023,15 @@ export const Dashboard: React.FC = () => {
           <CardHeader>
             <CardTitle className="flex items-center">
               <LineChart className="mr-2 h-5 w-5" />
-              트렌드 분석
+              임금인상률 추이 및 2026년 예측
             </CardTitle>
             <CardDescription>
               과거 임금인상률 추이 및 향후 전망
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {trendData && getChartData() ? (
-              <div className="h-64">
+            {getChartData() ? (
+              <div className="h-96">
                 <Line data={getChartData()!} options={getChartOptions()} />
               </div>
             ) : (
@@ -1043,8 +1076,6 @@ export const Dashboard: React.FC = () => {
         </Card>
       </div>
 
-      {/* What-If 시나리오 분석 섹션 */}
-      <WhatIfScenario />
     </div>
   );
 };
