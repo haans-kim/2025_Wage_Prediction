@@ -46,10 +46,11 @@ class ModelingService:
         
         # 데이터 크기에 따른 모델 선택
         # PDF 분석 결과를 반영하여 Random Forest를 소규모 데이터에도 포함
-        # Lasso 제외 (적은 데이터에서 모든 계수를 0으로 만드는 문제 방지)
-        self.small_data_models = ['lr', 'ridge', 'en', 'dt', 'rf']  # lasso 제외
-        self.medium_data_models = ['lr', 'ridge', 'en', 'dt', 'rf', 'gbr']  # lasso 제외
-        self.large_data_models = ['lr', 'ridge', 'en', 'dt', 'rf', 'gbr', 'xgboost', 'lightgbm']  # lasso 제외
+        # Lasso, Elastic Net 제외 (적은 데이터에서 모든 계수를 0으로 만드는 문제 방지)
+        # Random Forest를 앞쪽에 배치하여 우선 선택되도록 함
+        self.small_data_models = ['rf', 'dt', 'ridge', 'lr']  # lasso, en 제외, rf 우선
+        self.medium_data_models = ['rf', 'ridge', 'dt', 'lr', 'gbr']  # lasso, en 제외
+        self.large_data_models = ['rf', 'ridge', 'lr', 'dt', 'gbr', 'xgboost', 'lightgbm']  # lasso, en 제외
         
         # 모델 저장 경로
         self.model_dir = "saved_models"
