@@ -280,11 +280,11 @@ class ModelingService:
         
         # 타겟에 따라 모델 우선순위 조정
         if self.current_target == 'wage_increase_bu_sbl':
-            # Base-up: Random Forest 우선
-            models_to_use = ['rf', 'dt', 'ridge', 'lr']
+            # Base-up: Ridge 우선 (안정적인 선형 모델)
+            models_to_use = ['ridge', 'lr', 'rf', 'dt']
         elif self.current_target == 'wage_increase_mi_sbl':
-            # 성과급: Linear Regression 우선
-            models_to_use = ['lr', 'ridge', 'rf', 'dt']
+            # 성과급: Ridge만 사용 (Base-up과 동일한 모델로 비교)
+            models_to_use = ['ridge']  # Ridge만 사용하도록 강제
         else:
             models_to_use = optimal_settings['models']
         
