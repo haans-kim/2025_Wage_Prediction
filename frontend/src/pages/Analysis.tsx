@@ -131,7 +131,6 @@ export const Analysis: React.FC = () => {
           </CardHeader>
           <CardContent className="space-y-1">
             <p className="text-3xl font-bold">3.5%</p>
-            <p className="text-xs text-muted-foreground">신뢰구간: 2.8% ~ 3.8%</p>
           </CardContent>
         </Card>
 
@@ -142,7 +141,6 @@ export const Analysis: React.FC = () => {
           </CardHeader>
           <CardContent className="space-y-1">
             <p className="text-3xl font-bold">2.1%</p>
-            <p className="text-xs text-muted-foreground">신뢰구간: 1.8% ~ 2.3%</p>
           </CardContent>
         </Card>
 
