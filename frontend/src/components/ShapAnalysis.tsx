@@ -66,6 +66,7 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
         const baseupResponse = await apiClient.get('/api/analysis/shap', {
           params: { target: 'wage_increase_bu_sbl', top_n: 10 }
         });
+        console.log('Baseup SHAP response:', baseupResponse.data);
         setBaseupShap(baseupResponse.data);
       }
       
@@ -73,6 +74,7 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
         const performanceResponse = await apiClient.get('/api/analysis/shap', {
           params: { target: 'wage_increase_mi_sbl', top_n: 10 }
         });
+        console.log('Performance SHAP response:', performanceResponse.data);
         setPerformanceShap(performanceResponse.data);
       }
     } catch (err: any) {
@@ -272,7 +274,7 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 pb-6">
-              {performanceShap && performanceShap.available && performanceShap.feature_importance && performanceShap.feature_importance.length > 0 ? (
+              {performanceShap && performanceShap.available ? (
                 <div style={{ height: '350px', paddingBottom: '20px' }}>
                   {renderShapChart(performanceShap, '성과급', '#10B981')}
                 </div>
