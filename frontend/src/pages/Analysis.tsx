@@ -57,6 +57,8 @@ export const Analysis: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [baseupShapData, setBaseupShapData] = useState<FeatureImportance[]>([]);
   const [performanceShapData, setPerformanceShapData] = useState<FeatureImportance[]>([]);
+  const [baseupModelName, setBaseupModelName] = useState<string>('');
+  const [performanceModelName, setPerformanceModelName] = useState<string>('');
 
   useEffect(() => {
     loadAnalysisData();
@@ -80,6 +82,8 @@ export const Analysis: React.FC = () => {
       setModelPerformance(performanceRes);
       setBaseupShapData(baseupShapRes.data?.feature_importance || []);
       setPerformanceShapData(performanceShapRes.data?.feature_importance || []);
+      setBaseupModelName(baseupShapRes.data?.model_name || '');
+      setPerformanceModelName(performanceShapRes.data?.model_name || '');
     } catch (error) {
       setError('분석 데이터를 불러오는 중 오류가 발생했습니다.');
       console.error('Analysis data loading failed:', error);
@@ -158,7 +162,7 @@ export const Analysis: React.FC = () => {
       <div className="grid grid-cols-2 gap-6">
         {/* Base-up 모델 성능 */}
         <div>
-          <h3 className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-3">Base-up 모델 성능 (Linear Regression)</h3>
+          <h3 className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-3">Base-up 모델 성능 {baseupModelName && `(${baseupModelName})`}</h3>
           <div className="grid grid-cols-3 gap-2">
             <Card className="border-blue-400 dark:border-blue-600">
               <CardContent className="pt-3 pb-2 px-3">
@@ -183,7 +187,7 @@ export const Analysis: React.FC = () => {
 
         {/* 성과급 모델 성능 */}
         <div>
-          <h3 className="text-sm font-semibold text-green-600 dark:text-green-400 mb-3">성과급 모델 성능 (Decision Tree)</h3>
+          <h3 className="text-sm font-semibold text-green-600 dark:text-green-400 mb-3">성과급 모델 성능 {performanceModelName && `(${performanceModelName})`}</h3>
           <div className="grid grid-cols-3 gap-2">
             <Card className="border-green-400 dark:border-green-600">
               <CardContent className="pt-3 pb-2 px-3">

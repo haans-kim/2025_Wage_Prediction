@@ -39,6 +39,11 @@ class ModelingService:
         self.performance_feature_importance = None
         self.current_feature_importance = None
         
+        # 모델 이름 저장
+        self.baseup_model_name = None
+        self.performance_model_name = None
+        self.current_model_name = None
+        
         # 데이터 크기에 따른 모델 선택
         # PDF 분석 결과를 반영하여 Random Forest를 소규모 데이터에도 포함
         # Lasso 제외 (적은 데이터에서 모든 계수를 0으로 만드는 문제 방지)
@@ -465,13 +470,16 @@ class ModelingService:
             if self.current_target == 'wage_increase_bu_sbl':
                 self.baseup_model = final_model
                 self.baseup_feature_importance = feature_importance
+                self.baseup_model_name = readable_name  # 모델명 저장
                 logging.info(f"Base-up model stored with {len(feature_importance) if feature_importance else 0} features")
             elif self.current_target == 'wage_increase_mi_sbl':
                 self.performance_model = final_model
                 self.performance_feature_importance = feature_importance
+                self.performance_model_name = readable_name  # 모델명 저장
                 logging.info(f"Performance model stored with {len(feature_importance) if feature_importance else 0} features")
             
             self.current_feature_importance = feature_importance
+            self.current_model_name = readable_name  # 현재 모델명 저장
             
             # 모델 평가 메트릭 가져오기
             try:
@@ -869,6 +877,7 @@ class ModelingService:
                     data = pickle.load(f)
                     self.baseup_model = data['model']
                     self.baseup_feature_importance = data.get('feature_importance', [])
+                    self.baseup_model_name = data.get('model_type')  # 모델명 로드
                     models_loaded.append('baseup')
                 print(f"✅ Base-up model loaded from {self.baseup_model_path}")
                 print(f"   - Feature importance: {len(self.baseup_feature_importance) if self.baseup_feature_importance else 0} features")
@@ -879,6 +888,7 @@ class ModelingService:
                     data = pickle.load(f)
                     self.performance_model = data['model']
                     self.performance_feature_importance = data.get('feature_importance', [])
+                    self.performance_model_name = data.get('model_type')  # 모델명 로드
                     models_loaded.append('performance')
                 print(f"✅ Performance model loaded from {self.performance_model_path}")
                 print(f"   - Feature importance: {len(self.performance_feature_importance) if self.performance_feature_importance else 0} features")
@@ -889,6 +899,7 @@ class ModelingService:
                 with open(current_model_path, 'rb') as f:
                     data = pickle.load(f)
                     self.current_model = data['model']
+                    self.current_model_name = data.get('model_type')  # 모델명 로드
                     self.current_feature_importance = data.get('feature_importance', [])
                     self.current_target = data.get('target')
                     models_loaded.append('current')

@@ -82,6 +82,14 @@ async def get_shap_analysis(
                 if item.get('importance') is None:
                     item['importance'] = 0.0
             
+            # 모델명 가져오기
+            if target == "wage_increase_bu_sbl":
+                model_name = modeling_service.baseup_model_name
+            elif target == "wage_increase_mi_sbl":
+                model_name = modeling_service.performance_model_name
+            else:
+                model_name = modeling_service.current_model_name
+            
             result = {
                 'message': 'Feature importance from saved model',
                 'available': True,
@@ -90,7 +98,8 @@ async def get_shap_analysis(
                 'explainer_type': 'ModelFeatureImportance',
                 'n_features': len(feature_importance),
                 'n_samples_analyzed': 1,
-                'target': target
+                'target': target,
+                'model_name': model_name  # 모델명 추가
             }
             return result
         
@@ -100,8 +109,19 @@ async def get_shap_analysis(
             sample_index=sample_index,
             top_n=top_n
         )
-        # Target 정보를 결과에 추가
+        # Target 정보와 모델명을 결과에 추가
         result['target'] = target
+        
+        # 모델명 가져오기
+        if target == "wage_increase_bu_sbl":
+            model_name = modeling_service.baseup_model_name
+        elif target == "wage_increase_mi_sbl":
+            model_name = modeling_service.performance_model_name
+        else:
+            model_name = modeling_service.current_model_name
+        
+        if model_name:
+            result['model_name'] = model_name
         
         return result
         
