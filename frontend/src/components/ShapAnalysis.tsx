@@ -11,9 +11,7 @@ import {
   ArcElement
 } from 'chart.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Alert, AlertDescription } from './ui/alert';
-import { InfoIcon, TrendingUp, TrendingDown } from 'lucide-react';
 import { apiClient } from '../lib/api';
 
 ChartJS.register(
@@ -57,7 +55,7 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
 
   useEffect(() => {
     loadShapData();
-  }, [modelType]);
+  }, [modelType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadShapData = async () => {
     setLoading(true);

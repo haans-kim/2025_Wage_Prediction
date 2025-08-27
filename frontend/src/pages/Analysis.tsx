@@ -1,17 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 import { 
-  BarChart3, 
-  Brain, 
-  TrendingUp, 
-  Target,
   AlertTriangle,
-  CheckCircle,
-  Loader2,
-  Eye,
-  Zap
+  Loader2
 } from 'lucide-react';
 import { apiClient } from '../lib/api';
 import { ShapAnalysis } from '../components/ShapAnalysis';
@@ -22,7 +15,7 @@ interface FeatureImportance {
   std?: number;
 }
 
-interface ShapAnalysis {
+interface ShapAnalysisData {
   available: boolean;
   feature_importance: FeatureImportance[];
   sample_explanation?: any;
@@ -54,13 +47,14 @@ interface ModelPerformance {
 }
 
 export const Analysis: React.FC = () => {
-  const [shapAnalysis, setShapAnalysis] = useState<ShapAnalysis | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [shapAnalysis, setShapAnalysis] = useState<ShapAnalysisData | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [featureImportance, setFeatureImportance] = useState<FeatureImportance[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [modelPerformance, setModelPerformance] = useState<ModelPerformance | null>(null);
-  const [limeAnalysis, setLimeAnalysis] = useState<any>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedSample, setSelectedSample] = useState<number>(0);
   const [baseupShapData, setBaseupShapData] = useState<FeatureImportance[]>([]);
   const [performanceShapData, setPerformanceShapData] = useState<FeatureImportance[]>([]);
 
@@ -94,37 +88,8 @@ export const Analysis: React.FC = () => {
     }
   };
 
-  const handleShapAnalysis = async () => {
-    setLoading('shap');
-    setError(null);
 
-    try {
-      const result = await apiClient.getShapAnalysis(selectedSample);
-      setShapAnalysis(result);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'SHAP 분석 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(null);
-    }
-  };
 
-  const handleLimeAnalysis = async () => {
-    setLoading('lime');
-    setError(null);
-
-    try {
-      const result = await apiClient.getLimeAnalysis(selectedSample);
-      setLimeAnalysis(result);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'LIME 분석 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  const formatNumber = (num: number, decimals: number = 4) => {
-    return Number(num).toFixed(decimals);
-  };
 
   return (
     <div className="space-y-6">

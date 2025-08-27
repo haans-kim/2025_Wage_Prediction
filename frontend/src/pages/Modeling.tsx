@@ -3,13 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 import { 
-  Settings, 
-  Play, 
-  BarChart, 
   CheckCircle, 
   XCircle, 
   AlertTriangle,
-  Target,
   Brain,
   TrendingUp,
   Loader2,

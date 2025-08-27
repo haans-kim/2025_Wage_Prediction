@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Line, Bar, Chart } from 'react-chartjs-2';
+import { Line, Chart } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -22,18 +22,15 @@ import {
   Settings2, 
   Play,
   AlertTriangle,
-  CheckCircle,
   Loader2,
   Zap,
   Target,
   Activity,
-  DollarSign,
   PieChart,
   LineChart,
   Sliders
 } from 'lucide-react';
 import { apiClient } from '../lib/api';
-import { ShapAnalysis } from '../components/ShapAnalysis';
 
 // Chart.js 구성 요소 등록
 ChartJS.register(
@@ -100,14 +97,15 @@ interface EconomicIndicator {
 export const Dashboard: React.FC = () => {
   const [currentPrediction, setCurrentPrediction] = useState<PredictionResult | null>(null);
   const [scenarioTemplates, setScenarioTemplates] = useState<ScenarioTemplate[]>([]);
-  const [availableVariables, setAvailableVariables] = useState<Variable[]>([]);
-  const [economicIndicators, setEconomicIndicators] = useState<Record<string, EconomicIndicator>>({});
+  const [, setAvailableVariables] = useState<Variable[]>([]);
+  const [, setEconomicIndicators] = useState<Record<string, EconomicIndicator>>({});
   const [selectedScenario, setSelectedScenario] = useState<string>('moderate');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [customVariables, setCustomVariables] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scenarioResults, setScenarioResults] = useState<any[]>([]);
-  const [trendData, setTrendData] = useState<any>(null);
+  const [, setTrendData] = useState<any>(null);
   const [featureImportance, setFeatureImportance] = useState<FeatureImportanceData | null>(null);
   const [activeTarget, setActiveTarget] = useState<'baseup' | 'performance'>('baseup');
   const [dynamicVariables, setDynamicVariables] = useState<Record<string, number>>({});
@@ -237,12 +235,6 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleVariableChange = (variableName: string, value: number) => {
-    setCustomVariables(prev => ({
-      ...prev,
-      [variableName]: value
-    }));
-  };
 
   const handleCustomPrediction = async () => {
     setLoading('custom-prediction');
@@ -495,7 +487,7 @@ export const Dashboard: React.FC = () => {
     }
   });
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string) => { // eslint-disable-line @typescript-eslint/no-unused-vars
     const colors: Record<string, string> = {
       'growing': 'text-green-600',
       'improving': 'text-green-600',
@@ -516,14 +508,14 @@ export const Dashboard: React.FC = () => {
     const data = currentFeatures;
     
     // 현재 예측값을 백분율로 변환
-    const currentPredictionPercent = currentPrediction.prediction * 100;
+    // const currentPredictionPercent = currentPrediction.prediction * 100;
     
     // 상위 8개 주요 변수만 선택하고 나머지는 '기타'로 묶기
     const topFeatures = data.slice(0, 8);
     const otherFeatures = data.slice(8);
     
     // 전체 importance의 합
-    const totalImportance = data.reduce((sum: number, item: any) => sum + item.importance, 0);
+    // const totalImportance = data.reduce((sum: number, item: any) => sum + item.importance, 0);
     
     // 각 feature의 기여도를 극대화하여 계산
     const maxContribution = 1.5; // 최대 기여도 ±1.5%p

@@ -18,12 +18,6 @@ import {
 } from 'lucide-react';
 import { apiClient, DataUploadResponse, SampleDataResponse } from '../lib/api';
 
-interface FileValidation {
-  isValid: boolean;
-  issues: string[];
-  recommendations: string[];
-}
-
 export const DataUpload: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
