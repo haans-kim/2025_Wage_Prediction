@@ -346,18 +346,30 @@ export const Dashboard: React.FC = () => {
           segment: {
             borderDash: (ctx: any) => ctx.p0DataIndex === 8 ? [5, 5] : undefined, // 2025-2026 구간만 예측 점선
           },
+          datalabels: {
+            display: true,
+            color: 'rgb(168, 85, 247)', // 보라색
+            anchor: 'end' as const,
+            align: 'top' as const, // 점 위에 표시
+            offset: 2,
+            font: {
+              weight: 'bold' as const,
+              size: 10
+            },
+            formatter: (value: number) => value.toFixed(1),
+          }
         },
         {
-          label: '성과급',
-          data: performanceData,
-          borderColor: 'rgb(34, 197, 94)', // 녹색
-          backgroundColor: 'rgba(34, 197, 94, 0.15)',
+          label: 'Base-up',
+          data: baseupData,
+          borderColor: 'rgb(59, 130, 246)', // 파란색
+          backgroundColor: 'rgba(59, 130, 246, 0.15)',
           borderWidth: 2.5,
           tension: 0.4, // Bezier curve smoothing
           pointRadius: 3,
           pointHoverRadius: 5,
-          pointBackgroundColor: 'rgb(34, 197, 94)',
-          pointBorderColor: 'rgb(34, 197, 94)',
+          pointBackgroundColor: 'rgb(59, 130, 246)',
+          pointBorderColor: 'rgb(59, 130, 246)',
           pointBorderWidth: 1,
           fill: true,
           segment: {
@@ -365,7 +377,7 @@ export const Dashboard: React.FC = () => {
           },
           datalabels: {
             display: true,
-            color: 'rgb(34, 197, 94)', // 녹색
+            color: 'rgb(59, 130, 246)', // 파란색
             anchor: 'end' as const,
             align: 'bottom' as const, // 점 아래에 표시
             offset: 2,
@@ -377,12 +389,12 @@ export const Dashboard: React.FC = () => {
           }
         },
         {
-          label: 'Base-up',
-          data: baseupData.map((val, idx) => {
-            // Base-up 값을 성과급과 총 인상률 사이에 위치시키기 위한 가상 y값
-            const perfValue = performanceData[idx] || 0;
+          label: '성과급',
+          data: performanceData.map((val, idx) => {
+            // 성과급 값을 Base-up과 총 인상률 사이에 위치시키기 위한 가상 y값
+            const baseupValue = baseupData[idx] || 0;
             const totalValue = totalData[idx] || 0;
-            return (perfValue + totalValue) / 2;
+            return (baseupValue + totalValue) / 2;
           }),
           borderColor: 'transparent', // 라인 숨김
           backgroundColor: 'transparent', // 배경 숨김
@@ -392,8 +404,8 @@ export const Dashboard: React.FC = () => {
           fill: false,
           showLine: false, // 라인 숨김
           datalabels: {
-            display: true, // Base-up 라벨만 표시
-            color: 'rgb(59, 130, 246)', // 파란색
+            display: true, // 성과급 라벨만 표시
+            color: 'rgb(34, 197, 94)', // 녹색
             anchor: 'center' as const,
             align: 'center' as const,
             font: {
@@ -401,9 +413,9 @@ export const Dashboard: React.FC = () => {
               size: 10
             },
             formatter: (value: number, context: any) => {
-              // 실제 Base-up 값을 표시 (안전한 접근)
-              if (context && typeof context.dataIndex === 'number' && baseupData[context.dataIndex] !== undefined) {
-                return baseupData[context.dataIndex].toFixed(1);
+              // 실제 성과급 값을 표시 (안전한 접근)
+              if (context && typeof context.dataIndex === 'number' && performanceData[context.dataIndex] !== undefined) {
+                return performanceData[context.dataIndex].toFixed(1);
               }
               return '';
             },

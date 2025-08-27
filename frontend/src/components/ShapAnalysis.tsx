@@ -144,7 +144,33 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
 
     return (
       <div style={{ height: '350px' }}>
-        <Bar data={chartData} options={options} />
+        <Bar 
+          data={chartData} 
+          options={options}
+          plugins={[{
+            id: 'datalabels',
+            afterDatasetsDraw(chart: any) {
+              const ctx = chart.ctx;
+              chart.data.datasets.forEach((dataset: any, i: number) => {
+                const meta = chart.getDatasetMeta(i);
+                meta.data.forEach((bar: any, index: number) => {
+                  const data = dataset.data[index];
+                  const label = `${(data * 100).toFixed(1)}%`;
+                  
+                  ctx.fillStyle = 'white';
+                  ctx.font = 'bold 12px Arial';
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'middle';
+                  
+                  const x = bar.x + (data > 0 ? -20 : 20);
+                  const y = bar.y;
+                  
+                  ctx.fillText(label, x, y);
+                });
+              });
+            }
+          }]}
+        />
       </div>
     );
   };
