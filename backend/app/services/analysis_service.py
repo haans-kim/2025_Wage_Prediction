@@ -211,13 +211,14 @@ class AnalysisService:
                     
                     # Feature importance를 SHAP values처럼 변환
                     feature_importance = actual_model.feature_importances_
+                    print(f"📊 Feature importance shape: {feature_importance.shape}, Sum: {np.sum(feature_importance)}")
+                    print(f"📊 Feature importance sample: {feature_importance[:5]}")
+                    
                     n_samples = len(analysis_data)
                     
                     # 각 샘플에 대해 같은 feature importance를 복제 (SHAP 형식 맞추기)
+                    # 정규화는 하지 않고 원본 값 그대로 사용
                     shap_values = np.tile(feature_importance, (n_samples, 1))
-                    
-                    # 값을 정규화
-                    shap_values = shap_values / np.sum(np.abs(shap_values))
                     
                 elif hasattr(actual_model, 'coef_'):
                     # Linear 모델은 coefficients를 직접 사용

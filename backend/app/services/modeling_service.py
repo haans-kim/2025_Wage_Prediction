@@ -472,12 +472,20 @@ class ModelingService:
         old_stderr = sys.stderr
         
         try:
-            # 출력 억제
-            sys.stdout = io.StringIO()
-            sys.stderr = io.StringIO()
+            # 출력 억제 (디버깅을 위해 일시적으로 해제)
+            # sys.stdout = io.StringIO()
+            # sys.stderr = io.StringIO()
             
-            # 모델 생성
-            model = create_model(model_code, verbose=False)
+            # 모델 생성 - Random Forest의 경우 작은 데이터셋을 위한 파라미터 조정
+            if model_code == 'rf':
+                # 작은 데이터셋에서는 min_samples_split와 min_samples_leaf를 줄여야 함
+                model = create_model(model_code, verbose=False, 
+                                   min_samples_split=2,  # 최소값으로 설정
+                                   min_samples_leaf=1,    # 최소값으로 설정
+                                   max_depth=3,           # 깊이 제한으로 과적합 방지
+                                   n_estimators=50)       # 트리 개수 줄임
+            else:
+                model = create_model(model_code, verbose=False)
             
             # 모델 튜닝 (선택적)
             try:
@@ -494,8 +502,72 @@ class ModelingService:
             self.current_model = final_model
             self.is_model_trained_individually = True  # 개별 모델 학습 완료
             
-            # Feature importance 캡처
-            feature_importance = self._capture_feature_importance(final_model)
+            # Feature importance 캡처 - retrain_models.py와 동일한 방법 사용
+            feature_importance = []
+            try:
+                print(f"📊 Final model type: {type(final_model).__name__}")
+                print(f"📊 Final model attributes: {[attr for attr in dir(final_model) if not attr.startswith('_')][:10]}")
+                
+                # Pipeline인 경우 실제 모델 추출
+                actual_model = final_model
+                if hasattr(final_model, 'steps'):
+                    # Pipeline의 마지막 단계가 실제 모델
+                    actual_model = final_model.steps[-1][1]
+                    print(f"📊 Extracted from pipeline: {type(actual_model).__name__}")
+                
+                # finalize_model 후 실제 모델에서 직접 추출
+                if hasattr(actual_model, 'feature_importances_'):
+                    # Tree-based 모델 (Random Forest 등)
+                    from pycaret.regression import get_config
+                    X_train = get_config('X_train')
+                    feature_names = X_train.columns.tolist()
+                    importances = actual_model.feature_importances_  # actual_model 사용
+                    print(f"📊 Raw importances: sum={importances.sum()}, sample={importances[:5]}")
+                    
+                    for feat, imp in zip(feature_names, importances):
+                        feature_importance.append({
+                            'feature': feat,
+                            'importance': float(imp),
+                            'rank': 0
+                        })
+                    
+                    # 중요도로 정렬
+                    feature_importance.sort(key=lambda x: x['importance'], reverse=True)
+                    # 랭크 부여
+                    for i, item in enumerate(feature_importance):
+                        item['rank'] = i + 1
+                        
+                    print(f"📈 Extracted feature importance for {len(feature_importance)} features")
+                    print(f"📊 Top 3 features: {feature_importance[:3] if feature_importance else 'None'}")
+                    
+                elif hasattr(actual_model, 'coef_'):
+                    # Linear 모델
+                    from pycaret.regression import get_config
+                    X_train = get_config('X_train')
+                    feature_names = X_train.columns.tolist()
+                    coefs = actual_model.coef_  # actual_model 사용
+                    
+                    for feat, coef in zip(feature_names, coefs):
+                        feature_importance.append({
+                            'feature': feat,
+                            'importance': abs(float(coef)),
+                            'rank': 0
+                        })
+                    
+                    # 중요도로 정렬
+                    feature_importance.sort(key=lambda x: x['importance'], reverse=True)
+                    # 랭크 부여
+                    for i, item in enumerate(feature_importance):
+                        item['rank'] = i + 1
+                        
+                    print(f"📈 Extracted coefficients for {len(feature_importance)} features")
+                else:
+                    # Pipeline인 경우 _capture_feature_importance 사용
+                    feature_importance = self._capture_feature_importance(final_model)
+                    
+            except Exception as e:
+                print(f"⚠️ Feature importance extraction failed: {e}")
+                feature_importance = []
             
             # 타겟에 따라 모델 및 feature importance 저장
             if self.current_target == 'wage_increase_bu_sbl':
@@ -771,27 +843,55 @@ class ModelingService:
                     print(f"DEBUG: Method 2 (plot_model) failed: {str(e2)}")
                     pass
                     
-                    # 방법 3: 직접 모델 속성 접근
+                    # 방법 3: 직접 모델 속성 접근 (PyCaret Pipeline 깊이 탐색)
                     try:
                         from pycaret.regression import get_config
                         X_train = get_config('X_train')
                         feature_names = X_train.columns.tolist()
                         
-                        # Pipeline에서 실제 모델 추출
+                        # Pipeline에서 실제 모델 추출 - 더 깊이 탐색
                         actual_model = model
-                        if hasattr(model, 'steps'):
-                            # Pipeline인 경우 - 마지막 단계가 실제 모델
-                            actual_model = model.steps[-1][1] if model.steps else model
-                            print(f"DEBUG: Extracted model from pipeline: {type(actual_model).__name__}")
+                        print(f"DEBUG: Starting model type: {type(actual_model).__name__}")
                         
-                        # 중첩된 Pipeline 처리
-                        if hasattr(actual_model, 'steps'):
-                            actual_model = actual_model.steps[-1][1] if actual_model.steps else actual_model
-                            print(f"DEBUG: Extracted model from nested pipeline: {type(actual_model).__name__}")
+                        # PyCaret은 여러 층의 Pipeline을 사용할 수 있음
+                        max_depth = 10  # 최대 탐색 깊이
+                        depth = 0
                         
+                        while depth < max_depth:
+                            if hasattr(actual_model, 'steps') and actual_model.steps:
+                                # Pipeline인 경우 마지막 단계 추출
+                                actual_model = actual_model.steps[-1][1]
+                                print(f"DEBUG: Depth {depth}: Extracted from pipeline -> {type(actual_model).__name__}")
+                                depth += 1
+                            elif hasattr(actual_model, 'estimator'):
+                                # Wrapper가 estimator를 가진 경우
+                                actual_model = actual_model.estimator
+                                print(f"DEBUG: Depth {depth}: Extracted from estimator -> {type(actual_model).__name__}")
+                                depth += 1
+                            elif hasattr(actual_model, 'regressor'):
+                                # Wrapper가 regressor를 가진 경우  
+                                actual_model = actual_model.regressor
+                                print(f"DEBUG: Depth {depth}: Extracted from regressor -> {type(actual_model).__name__}")
+                                depth += 1
+                            elif hasattr(actual_model, '_final_estimator'):
+                                # Stacking 등에서 사용
+                                actual_model = actual_model._final_estimator
+                                print(f"DEBUG: Depth {depth}: Extracted from _final_estimator -> {type(actual_model).__name__}")
+                                depth += 1
+                            else:
+                                # 더 이상 추출할 수 없음
+                                break
+                        
+                        print(f"DEBUG: Final extracted model type: {type(actual_model).__name__}")
+                        print(f"DEBUG: Model attributes: {dir(actual_model)[:10]}...")  # 첫 10개 속성만 표시
+                        
+                        # feature importance 추출
                         if hasattr(actual_model, 'feature_importances_'):
                             importances = actual_model.feature_importances_
-                            print(f"DEBUG: Found feature_importances_ with {len(importances)} features")
+                            print(f"DEBUG: Found feature_importances_ with shape {importances.shape}")
+                            print(f"DEBUG: Feature names count: {len(feature_names)}")
+                            print(f"DEBUG: Sample importances: {importances[:5] if len(importances) > 5 else importances}")
+                            
                             for i, importance in enumerate(importances):
                                 if i < len(feature_names):
                                     importance_list.append({
@@ -799,11 +899,15 @@ class ModelingService:
                                         'importance': float(importance),
                                         'rank': 0
                                     })
+                            print(f"DEBUG: Added {len(importance_list)} features to importance_list")
+                            
                         elif hasattr(actual_model, 'coef_'):
                             coefs = actual_model.coef_
                             if len(coefs.shape) > 1:
                                 coefs = coefs[0]
-                            print(f"DEBUG: Found coef_ with {len(coefs)} coefficients")
+                            print(f"DEBUG: Found coef_ with shape {coefs.shape if hasattr(coefs, 'shape') else len(coefs)}")
+                            print(f"DEBUG: Sample coefficients: {coefs[:5] if len(coefs) > 5 else coefs}")
+                            
                             for i, coef in enumerate(coefs):
                                 if i < len(feature_names):
                                     importance_list.append({
@@ -811,6 +915,10 @@ class ModelingService:
                                         'importance': abs(float(coef)),
                                         'rank': 0
                                     })
+                            print(f"DEBUG: Added {len(importance_list)} features to importance_list")
+                        else:
+                            print(f"DEBUG: Model has neither feature_importances_ nor coef_")
+                            print(f"DEBUG: Available attributes: {[attr for attr in dir(actual_model) if not attr.startswith('_')][:20]}")
                                     
                     except Exception as e3:
                         # Direct access might fail too, continue to fallback
