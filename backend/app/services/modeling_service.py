@@ -470,16 +470,16 @@ class ModelingService:
             if self.current_target == 'wage_increase_bu_sbl':
                 self.baseup_model = final_model
                 self.baseup_feature_importance = feature_importance
-                self.baseup_model_name = readable_name  # 모델명 저장
+                self.baseup_model_name = model_name  # 모델명 저장
                 logging.info(f"Base-up model stored with {len(feature_importance) if feature_importance else 0} features")
             elif self.current_target == 'wage_increase_mi_sbl':
                 self.performance_model = final_model
                 self.performance_feature_importance = feature_importance
-                self.performance_model_name = readable_name  # 모델명 저장
+                self.performance_model_name = model_name  # 모델명 저장
                 logging.info(f"Performance model stored with {len(feature_importance) if feature_importance else 0} features")
             
             self.current_feature_importance = feature_importance
-            self.current_model_name = readable_name  # 현재 모델명 저장
+            self.current_model_name = model_name  # 현재 모델명 저장
             
             # 모델 평가 메트릭 가져오기
             try:
