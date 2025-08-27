@@ -98,17 +98,7 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
         data: featuresToShow.map(f => f.importance),
         backgroundColor: featuresToShow.map(f => f.importance > 0 ? color : '#EF4444'),
         borderColor: featuresToShow.map(f => f.importance > 0 ? color : '#EF4444'),
-        borderWidth: 1,
-        datalabels: {
-          display: true,
-          color: 'white',
-          font: {
-            weight: 'bold' as const
-          },
-          formatter: (value: number) => {
-            return `${(value * 100).toFixed(1)}%`;
-          }
-        }
+        borderWidth: 1
       }]
     };
 
