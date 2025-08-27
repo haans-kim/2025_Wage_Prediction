@@ -277,7 +277,16 @@ class ModelingService:
         # 현재 데이터 크기 확인
         data_size = len(data_service.current_data)
         optimal_settings = self.get_optimal_settings(data_size)
-        models_to_use = optimal_settings['models']
+        
+        # 타겟에 따라 모델 우선순위 조정
+        if self.current_target == 'wage_increase_bu_sbl':
+            # Base-up: Random Forest 우선
+            models_to_use = ['rf', 'dt', 'ridge', 'lr']
+        elif self.current_target == 'wage_increase_mi_sbl':
+            # 성과급: Linear Regression 우선
+            models_to_use = ['lr', 'ridge', 'rf', 'dt']
+        else:
+            models_to_use = optimal_settings['models']
         
         old_stdout = sys.stdout
         old_stderr = sys.stderr
@@ -320,14 +329,35 @@ class ModelingService:
             sys.stdout = io.StringIO()
             sys.stderr = io.StringIO()
             
+            # 우선 모델 선택 로직
+            preferred_model = None
+            if self.current_target == 'wage_increase_bu_sbl':
+                # Base-up: Random Forest 우선
+                for model in best_models:
+                    if 'RandomForest' in str(type(model).__name__):
+                        preferred_model = model
+                        print("🎯 Random Forest selected for Base-up")
+                        break
+            elif self.current_target == 'wage_increase_mi_sbl':
+                # 성과급: Linear Regression 우선
+                for model in best_models:
+                    if 'Linear' in str(type(model).__name__) or 'Ridge' in str(type(model).__name__):
+                        preferred_model = model
+                        print("🎯 Linear/Ridge Regression selected for Performance")
+                        break
+            
+            # 우선 모델이 없으면 최적 모델 사용
+            if preferred_model is None:
+                preferred_model = best_models[0] if best_models else None
+            
             self.model_results = {
                 'best_models': best_models,
                 'comparison_df': comparison_results,
-                'recommended_model': best_models[0] if best_models else None
+                'recommended_model': preferred_model
             }
             
             # current_model 설정
-            self.current_model = best_models[0] if best_models else None
+            self.current_model = preferred_model
             
             # Feature importance 캡처
             if self.current_model:
