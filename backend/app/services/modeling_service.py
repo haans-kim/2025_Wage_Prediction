@@ -547,10 +547,22 @@ class ModelingService:
                     feature_names = X_train.columns.tolist()
                     coefs = actual_model.coef_  # actual_model 사용
                     
-                    for feat, coef in zip(feature_names, coefs):
+                    # 계수의 절대값을 가져와서 정규화
+                    abs_coefs = np.abs(coefs)
+                    
+                    # 전체 합이 1이 되도록 정규화 (백분율로 변환 가능)
+                    if abs_coefs.sum() > 0:
+                        normalized_coefs = abs_coefs / abs_coefs.sum()
+                    else:
+                        normalized_coefs = abs_coefs
+                    
+                    print(f"📊 Raw coefficients range: {abs_coefs.min():.6f} - {abs_coefs.max():.6f}")
+                    print(f"📊 Normalized coefficients range: {normalized_coefs.min():.6f} - {normalized_coefs.max():.6f}")
+                    
+                    for feat, norm_coef in zip(feature_names, normalized_coefs):
                         feature_importance.append({
                             'feature': feat,
-                            'importance': abs(float(coef)),
+                            'importance': float(norm_coef),  # 정규화된 값 사용
                             'rank': 0
                         })
                     
@@ -560,7 +572,8 @@ class ModelingService:
                     for i, item in enumerate(feature_importance):
                         item['rank'] = i + 1
                         
-                    print(f"📈 Extracted coefficients for {len(feature_importance)} features")
+                    print(f"📈 Extracted normalized coefficients for {len(feature_importance)} features")
+                    print(f"📊 Top 3 features: {feature_importance[:3] if feature_importance else 'None'}")
                 else:
                     # Pipeline인 경우 _capture_feature_importance 사용
                     feature_importance = self._capture_feature_importance(final_model)
