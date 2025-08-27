@@ -21,17 +21,80 @@ async def get_shap_analysis(
     SHAP 분석 결과 반환 (Base-up 또는 성과급)
     """
     try:
-        # Target에 따른 모델 선택
+        # Target에 따른 모델과 feature importance 선택
         if target == "wage_increase_bu_sbl":
             model = modeling_service.baseup_model if hasattr(modeling_service, 'baseup_model') else modeling_service.current_model
+            feature_importance = modeling_service.baseup_feature_importance if hasattr(modeling_service, 'baseup_feature_importance') else None
         elif target == "wage_increase_mi_sbl":
             model = modeling_service.performance_model if hasattr(modeling_service, 'performance_model') else modeling_service.current_model
+            feature_importance = modeling_service.performance_feature_importance if hasattr(modeling_service, 'performance_feature_importance') else None
         else:
             model = modeling_service.current_model
+            feature_importance = modeling_service.current_feature_importance if hasattr(modeling_service, 'current_feature_importance') else None
             
         if not model:
             raise HTTPException(status_code=404, detail=f"No trained model available for {target}")
         
+        # Feature importance가 있으면 직접 사용
+        if feature_importance and len(feature_importance) > 0:
+            # Feature importance를 직접 반환 (상위 N개만)
+            sorted_importance = sorted(feature_importance, key=lambda x: x.get('importance', 0) if x.get('importance') is not None else 0, reverse=True)[:top_n]
+            
+            # 한글 feature 이름 매핑
+            feature_name_map = {
+                'gdp_growth_kr': 'GDP 성장률(한국)',
+                'cpi_kr': '소비자물가지수(한국)',
+                'unemployment_rate_kr': '실업률(한국)',
+                'minimum_wage_increase_kr': '최저임금 인상률',
+                'gdp_growth_usa': 'GDP 성장률(미국)',
+                'cpi_usa': '소비자물가지수(미국)',
+                'unemployment_rate_us': '실업률(미국)',
+                'ecii_usa': '고용비용지수(미국)',
+                'exchange_rate_change_krw': '원화 환율 변동률',
+                'revenue_growth_sbl': '매출 증가율(삼바)',
+                'op_profit_growth_sbl': '영업이익 증가율(삼바)',
+                'labor_cost_rate_sbl': '인건비 비중(삼바)',
+                'labor_cost_per_employee_sbl': '인당 인건비(삼바)',
+                'labor_to_revenue_sbl': '매출액 대비 인건비(삼바)',
+                'revenue_per_employee_sbl': '인당 매출액(삼바)',
+                'op_profit_per_employee_sbl': '인당 영업이익(삼바)',
+                'hcroi_sbl': 'HCROI(삼바)',
+                'hcva_sbl': 'HCVA(삼바)',
+                'revenue_growth_ce': '동종업계 매출 증가율',
+                'op_profit_growth_ce': '동종업계 영업이익 증가율',
+                'hcroi_ce': '동종업계 HCROI',
+                'hcva_ce': '동종업계 HCVA',
+                'market_size_growth_rate': '바이오의약산업 매출액 증가율',
+                'compensation_competitiveness': '보상경쟁력',
+                'wage_increase_major_group': '대기업집단 기본급 인상률',
+                'compensation_increase_major_group': '대기업집단 총급여인상률',
+                'wage_increase_bu_group': '그룹 base-up 인상률',
+                'wage_increase_mi_group': '그룹 성과 인상률',
+                'wage_increase_total_group': '그룹 전체 인상률',
+                'public_sector_wage_increase': '공공기관 임금인상률'
+            }
+            
+            # Feature 이름을 한글로 변환하고 importance 값 확인
+            for item in sorted_importance:
+                original_name = item.get('feature', '')
+                item['feature'] = feature_name_map.get(original_name, original_name)
+                # importance가 None이면 0으로 설정
+                if item.get('importance') is None:
+                    item['importance'] = 0.0
+            
+            result = {
+                'message': 'Feature importance from saved model',
+                'available': True,
+                'feature_importance': sorted_importance,
+                'sample_explanation': None,
+                'explainer_type': 'ModelFeatureImportance',
+                'n_features': len(feature_importance),
+                'n_samples_analyzed': 1,
+                'target': target
+            }
+            return result
+        
+        # Feature importance가 없으면 SHAP 분석 시도
         result = analysis_service.get_shap_analysis(
             model=model,
             sample_index=sample_index,
