@@ -130,6 +130,9 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
               return `중요도: ${value > 0 ? '+' : ''}${(value * 100).toFixed(1)}%`;
             }
           }
+        },
+        datalabels: {
+          display: false
         }
       },
       scales: {
@@ -276,7 +279,7 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
           <Card>
             <CardHeader>
               <CardTitle className="text-lg text-blue-600 dark:text-blue-400">
-                Base-up 특성 중요도
+                Base-up 인상률 특성 중요도
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 pb-6">
@@ -296,7 +299,7 @@ export const ShapAnalysis: React.FC<ShapAnalysisProps> = ({
           <Card>
             <CardHeader>
               <CardTitle className="text-lg text-green-600 dark:text-green-400">
-                성과급 특성 중요도
+                성과급 인상률 특성 중요도
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 pb-6">
