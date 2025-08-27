@@ -233,9 +233,11 @@ tasks/
 # Project specific
 uploads/
 data/current_data.pkl
-*.pkl
+# *.pkl  # Commented out to track master pickle files
 *.joblib
 *.h5
+# Keep master data files
+!backend/data/master_data.pkl
 
 # Frontend
 frontend/build/
