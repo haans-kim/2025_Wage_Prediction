@@ -8,11 +8,26 @@ SambioWage is a wage prediction application using machine learning (PyCaret) wit
 
 ## Development Commands
 
+### Virtual Environment Setup (Python 3.10)
+```bash
+# Create virtual environment with Python 3.10
+python3.10 -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Upgrade pip
+pip install --upgrade pip
+
+# Install backend dependencies
+pip install -r backend/requirements.txt
+```
+
 ### Frontend (React + TypeScript)
 ```bash
 cd frontend
 npm install              # Install dependencies
-npm start                # Start development server (port 3000)
+npm start                # Start development server (port 3001)
 npm run build           # Build for production
 npm test                # Run tests
 ```
@@ -20,10 +35,10 @@ npm test                # Run tests
 ### Backend (FastAPI + PyCaret)
 ```bash
 cd backend
-pip install -r requirements.txt    # Install dependencies
-python run.py                      # Start server (port 8000)
+source ../venv/bin/activate        # Activate virtual environment
+python run.py                      # Start server (port 8001)
 # OR
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 ```
 
 ### Full Stack Development
@@ -68,11 +83,16 @@ docker-compose up -d
    - Uploaded files processed in memory or saved to `uploads/`
    - Excel files (`.xlsx`) as primary data format
 
-3. **CORS Configuration**:
+3. **Port Configuration**:
+   - Frontend: Port 3001 (changed from default 3000)
+   - Backend: Port 8001 (changed from default 8000)
+   - Configuration in `frontend/.env` and `backend/run.py`
+
+4. **CORS Configuration**:
    - Backend configured to accept all origins (`*`)
    - Double CORS middleware for compatibility
 
-4. **Deployment Options**:
+5. **Deployment Options**:
    - Railway (recommended - easiest)
    - Render
    - Docker Compose
