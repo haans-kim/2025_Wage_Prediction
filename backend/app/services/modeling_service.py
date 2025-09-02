@@ -86,6 +86,7 @@ class ModelingService:
             raise ValueError("No data loaded for modeling")
         
         df = data_service.current_data.copy()
+        print(f"📊 Current data shape from data_service: {df.shape}")
         
         # data_service에서 설정된 컬럼 정보 가져오기
         model_config = data_service.get_model_config()
@@ -261,6 +262,17 @@ class ModelingService:
                     'feature_selection': optimal_settings['feature_selection']
                 }
             
+            # 데이터가 너무 작은 경우 처리
+            if len(ml_data) < 20:
+                print(f"⚠️ Data too small ({len(ml_data)} rows). Adjusting settings...")
+                # 작은 데이터셋을 위한 조정
+                actual_train_size = 0.9  # 더 많은 데이터를 학습에 사용
+                config['remove_outliers'] = False  # 이상치 제거 안함
+                config['feature_selection'] = False  # 특성 선택 안함
+                fold_count = min(2, len(ml_data) // 2)  # CV fold 수 줄이기
+            else:
+                fold_count = optimal_settings['cv_folds']
+            
             # PyCaret setup 실행 (자동 전처리 강화)
             exp = setup(
                 data=ml_data,
@@ -301,14 +313,29 @@ class ModelingService:
                 n_features_to_select=optimal_settings.get('n_features_to_select', 0.8) if config.get('feature_selection', False) else 1.0,
                 
                 # CV 전략
-                fold_strategy='kfold',
-                fold=optimal_settings['cv_folds']
+                fold_strategy='kfold' if len(ml_data) >= 20 else 'timeseries',
+                fold=fold_count
             )
             
             self.current_experiment = exp
             self.is_setup_complete = True
             
         except Exception as e:
+            # 출력 복원 먼저
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            
+            import traceback
+            print(f"❌ PyCaret setup error: {str(e)}")
+            print(f"❌ Error type: {type(e).__name__}")
+            print(f"❌ Traceback: {traceback.format_exc()}")
+            
+            # ml_data 정보 출력
+            print(f"❌ ml_data shape: {ml_data.shape}")
+            print(f"❌ ml_data columns: {list(ml_data.columns)}")
+            print(f"❌ target_column: {target_column}")
+            print(f"❌ target_column in ml_data: {target_column in ml_data.columns}")
+            
             raise RuntimeError(f"PyCaret setup failed: {str(e)}")
         finally:
             # 출력 복원

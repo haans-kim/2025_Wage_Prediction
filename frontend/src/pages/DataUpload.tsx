@@ -513,7 +513,7 @@ export const DataUpload: React.FC = () => {
               </CardHeader>
               <CardContent className="pt-1 pb-2">
                 <p className="text-sm font-bold">
-                  {uploadResult.summary.shape[0].toLocaleString()} × {uploadResult.summary.shape[1]}
+                  {uploadResult.summary?.shape[0].toLocaleString()} × {uploadResult.summary?.shape[1]}
                 </p>
               </CardContent>
             </Card>
@@ -523,7 +523,7 @@ export const DataUpload: React.FC = () => {
                 <CardTitle className="text-xs text-muted-foreground">수치형 컬럼</CardTitle>
               </CardHeader>
               <CardContent className="pt-1 pb-2">
-                <p className="text-sm font-bold">{uploadResult.summary.numeric_columns.length}개</p>
+                <p className="text-sm font-bold">{uploadResult.summary?.numeric_columns.length}개</p>
               </CardContent>
             </Card>
             
@@ -533,7 +533,7 @@ export const DataUpload: React.FC = () => {
               </CardHeader>
               <CardContent className="pt-1 pb-2">
                 <p className="text-sm font-bold">
-                  {uploadResult.summary.missing_data_percentage.toFixed(1)}%
+                  {uploadResult.summary?.missing_data_percentage.toFixed(1)}%
                 </p>
               </CardContent>
             </Card>
@@ -585,7 +585,7 @@ export const DataUpload: React.FC = () => {
                   </thead>
                   <tbody>
                     {(uploadResult?.data_analysis.sample_data || sampleData?.data || [])
-                      .map((row, index) => (
+                      .map((row: any, index: number) => (
                         <tr key={index} className="border-b">
                           {Object.values(row).map((cell, cellIndex) => (
                             <td key={cellIndex} className="p-1">

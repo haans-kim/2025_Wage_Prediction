@@ -196,6 +196,12 @@ async def get_explainer_dashboard_status() -> Dict[str, Any]:
     """
     try:
         status = explainer_dashboard_service.get_status()
+        # URL을 현재 요청의 호스트로 변경
+        if status.get("url") and "0.0.0.0" in status["url"]:
+            # 외부 접근 가능한 URL로 변경 (8050 포트 사용)
+            status["url"] = status["url"].replace("0.0.0.0", "localhost")
+            status["external_port"] = 8050
+            status["note"] = "외부 접근 시 8050 포트를 방화벽에서 허용해야 합니다"
         return status
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard status: {str(e)}")
@@ -245,3 +251,4 @@ async def stop_explainer_dashboard() -> Dict[str, Any]:
         return {"message": "ExplainerDashboard stopped successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to stop dashboard: {str(e)}")
+

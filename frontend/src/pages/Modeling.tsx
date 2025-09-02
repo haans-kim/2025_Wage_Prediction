@@ -16,10 +16,9 @@ import {
   Trash2,
   Info
 } from 'lucide-react';
-import { apiClient } from '../lib/api';
+import { apiClient, ModelingStatus as ApiModelingStatus } from '../lib/api';
 
-interface ModelingStatus {
-  pycaret_available: boolean;
+interface ModelingStatus extends ApiModelingStatus {
   environment_setup: boolean;
   model_trained: boolean;
   models_compared: boolean;
@@ -57,7 +56,13 @@ export const Modeling: React.FC = () => {
         apiClient.getCurrentData(5, false).catch(() => null)
       ]);
 
-      setStatus(statusRes);
+      setStatus({
+        ...statusRes,
+        environment_setup: statusRes.environment_setup || false,
+        model_trained: statusRes.model_trained || false,
+        models_compared: statusRes.models_compared || false,
+        data_loaded: statusRes.data_loaded || false
+      });
       
       if (currentDataRes?.summary?.columns) {
         setAvailableColumns(currentDataRes.summary.columns);
@@ -120,7 +125,7 @@ export const Modeling: React.FC = () => {
     setError(null);
 
     try {
-      const result = await apiClient.trainModel(modelCode, true);
+      const result = await apiClient.trainModel(modelCode, 0.2);
       setTrainingResult(result);
       await loadInitialData(); // 상태 새로고침
     } catch (error) {

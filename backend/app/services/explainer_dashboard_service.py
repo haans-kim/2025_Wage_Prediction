@@ -151,7 +151,8 @@ class ExplainerDashboardService:
             time.sleep(3)
             
             self.is_running = True
-            self.dashboard_url = f"http://localhost:{self.dashboard_port}"
+            # 외부 접근을 위해 0.0.0.0으로 설정 (클라이언트는 실제 서버 IP로 접근)
+            self.dashboard_url = f"http://0.0.0.0:{self.dashboard_port}"
             
             logger.info(f"ExplainerDashboard started at {self.dashboard_url}")
             
@@ -173,7 +174,12 @@ class ExplainerDashboardService:
     def _run_dashboard(self):
         """대시보드 실행 (별도 스레드)"""
         try:
-            self.dashboard.run(use_waitress=True)
+            # 외부 접근을 위해 0.0.0.0으로 바인딩
+            self.dashboard.run(
+                host='0.0.0.0',  # 모든 인터페이스에서 접근 가능
+                port=self.dashboard_port,
+                use_waitress=True
+            )
         except Exception as e:
             logger.error(f"Dashboard runtime error: {str(e)}")
             self.is_running = False

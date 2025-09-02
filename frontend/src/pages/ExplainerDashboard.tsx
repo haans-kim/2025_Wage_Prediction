@@ -9,7 +9,8 @@ import {
   Loader2,
   AlertTriangle,
   RefreshCw,
-  Info
+  Info,
+  ExternalLink
 } from 'lucide-react';
 import { apiClient } from '../lib/api';
 
@@ -215,14 +216,43 @@ export const ExplainerDashboard: React.FC = () => {
 
         <TabsContent value="dashboard" className="space-y-4">
           {explainerUrl ? (
-            <div className="bg-background rounded-lg overflow-hidden" style={{ height: 'calc(100vh - 120px)' }}>
-              <iframe
-                src={explainerUrl}
-                className="w-full h-full border-0"
-                title="ExplainerDashboard"
-                allow="fullscreen"
-                style={{ minHeight: '800px' }}
-              />
+            <div className="bg-background rounded-lg p-6">
+              <Alert>
+                <ExternalLink className="h-4 w-4" />
+                <AlertTitle>ExplainerDashboard 준비 완료</AlertTitle>
+                <AlertDescription className="space-y-4">
+                  <p>ExplainerDashboard가 별도 포트에서 실행 중입니다.</p>
+                  <div className="flex gap-4 items-center mt-3">
+                    <Button 
+                      onClick={() => {
+                        // URL을 서버 주소로 변경 (0.0.0.0을 현재 호스트로)
+                        const url = explainerUrl.replace('0.0.0.0', window.location.hostname).replace('localhost', window.location.hostname);
+                        window.open(url, '_blank');
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      새 창에서 열기 (포트 8050)
+                    </Button>
+                    <div className="text-sm text-muted-foreground">
+                      주의: 외부 접근 시 8050 포트가 방화벽에서 허용되어야 합니다
+                    </div>
+                  </div>
+                </AlertDescription>
+              </Alert>
+              
+              {/* 로컬에서만 iframe 표시 */}
+              {window.location.hostname === 'localhost' && (
+                <div className="mt-6 bg-background rounded-lg overflow-hidden" style={{ height: 'calc(100vh - 300px)' }}>
+                  <iframe
+                    src={explainerUrl}
+                    className="w-full h-full border-0"
+                    title="ExplainerDashboard"
+                    allow="fullscreen"
+                    style={{ minHeight: '600px' }}
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <Alert>

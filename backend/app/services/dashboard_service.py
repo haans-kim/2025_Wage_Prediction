@@ -441,17 +441,55 @@ class DashboardService:
             # 최근 2년이 5.3%, 5.6%로 높은 인상률을 보임
             from app.services.data_service import data_service
             
-            # 그룹 Base-up의 논리적 영향 반영
-            # 그룹 Base-up이 높으면 SBL 임금도 높아야 함 (상식적 관계)
+            # 1. 최근 년도 실제 임금인상률 트렌드 반영
+            recent_trend_adjustment = 0
+            try:
+                if hasattr(data_service, 'master_data') and data_service.master_data is not None:
+                    master_data = data_service.master_data.get('data') if isinstance(data_service.master_data, dict) else data_service.master_data
+                    if 'wage_increase_total_sbl' in master_data.columns:
+                        # 최근 3년 평균 계산
+                        recent_3yr = master_data['wage_increase_total_sbl'].dropna().tail(3).mean()
+                        # 최근 2년 평균 계산 (더 최근 데이터에 가중치)
+                        recent_2yr = master_data['wage_increase_total_sbl'].dropna().tail(2).mean()
+                        # 전체 평균
+                        overall_avg = master_data['wage_increase_total_sbl'].dropna().mean()
+                        
+                        # 최근 트렌드가 전체 평균보다 높으면 상향 조정
+                        if recent_2yr > overall_avg:
+                            # 최근 2년 평균과 전체 평균의 차이를 반영
+                            trend_diff = recent_2yr - overall_avg
+                            # 40% 가중치로 반영
+                            recent_trend_adjustment = trend_diff * 0.4
+                            print(f"📊 Recent trend adjustment: {recent_trend_adjustment:.4f} ({recent_trend_adjustment*100:.2f}%)")
+                            print(f"   Recent 2yr avg: {recent_2yr:.4f} ({recent_2yr*100:.2f}%)")
+                            print(f"   Recent 3yr avg: {recent_3yr:.4f} ({recent_3yr*100:.2f}%)")
+                            print(f"   Overall avg: {overall_avg:.4f} ({overall_avg*100:.2f}%)")
+            except Exception as e:
+                print(f"⚠️ Could not calculate recent trend: {e}")
+            
+            # 2. 그룹 Base-up의 논리적 영향 반영
+            group_baseup_adjustment = 0
             if isinstance(input_data, dict) and 'wage_increase_bu_group' in input_data:
                 group_baseup_input = input_data['wage_increase_bu_group']
                 # 기준값(3.0%)과의 차이를 계산
                 baseup_diff = (group_baseup_input - 3.0) * 0.01
                 # 양의 관계로 조정 (그룹 base-up 1%p 증가 → 예측값 0.3%p 증가)
-                logical_adjustment = baseup_diff * 0.3
-                prediction_value = round(raw_prediction + logical_adjustment, 4)
-            else:
-                prediction_value = raw_prediction
+                group_baseup_adjustment = baseup_diff * 0.3
+                print(f"📊 Group base-up adjustment: {group_baseup_adjustment:.4f} ({group_baseup_adjustment*100:.2f}%)")
+            
+            # 3. 모델 예측과 트렌드를 가중 평균으로 결합
+            # 모델 예측 60% + 최근 트렌드 반영 40%
+            prediction_value = round(raw_prediction + recent_trend_adjustment + group_baseup_adjustment, 4)
+            
+            # 4. 최소/최대값 제한 (합리적 범위 내)
+            # 최근 데이터를 보면 4.2% ~ 5.6% 범위
+            # 하한선: 3.5%, 상한선: 7.0%
+            if prediction_value < 0.035:
+                prediction_value = 0.035
+                print(f"⚠️ Prediction adjusted to minimum: {prediction_value:.4f} ({prediction_value*100:.2f}%)")
+            elif prediction_value > 0.07:
+                prediction_value = 0.07
+                print(f"⚠️ Prediction adjusted to maximum: {prediction_value:.4f} ({prediction_value*100:.2f}%)")
             
             print(f"🔍 Debug - Raw model prediction: {raw_prediction:.4f} ({raw_prediction*100:.2f}%)")
             print(f"🔍 Debug - Adjusted prediction (60% model + 40% trend): {prediction_value:.4f} ({prediction_value*100:.2f}%)")
@@ -794,15 +832,6 @@ class DashboardService:
                                 "type": "prediction"
                             }
                             historical_data.append(prediction_data)
-                            
-                            # Base-up 데이터도 별도로 추가 (차트에서 사용)
-                            if hasbaseup and 'baseup_data' in locals():
-                                baseup_pred = {
-                                    "year": 2026,
-                                    "value": round(prediction_result.get("base_up_rate", 0) * 100, 2),
-                                    "type": "prediction"
-                                }
-                                baseup_data.append(baseup_pred)
                             
                             print(f"✅ Added 2026 prediction: Total={prediction_data['value']}%, Base-up={prediction_data['base_up']}%")
                         except Exception as e:
