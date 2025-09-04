@@ -197,12 +197,10 @@ export const Modeling: React.FC = () => {
           <h1 className="text-3xl font-bold text-foreground">모델링</h1>
           <p className="text-muted-foreground">PyCaret을 사용한 머신러닝 모델 학습</p>
         </div>
-        {status?.environment_setup && (
-          <Button variant="outline" onClick={handleClearModels} disabled={loading === 'clear'}>
-            <Trash2 className="mr-2 h-4 w-4" />
-            {loading === 'clear' ? '초기화 중...' : '모델 초기화'}
-          </Button>
-        )}
+        <Button variant="outline" onClick={handleClearModels} disabled={loading === 'clear'}>
+          <Trash2 className="mr-2 h-4 w-4" />
+          {loading === 'clear' ? '초기화 중...' : '모델 초기화'}
+        </Button>
       </div>
 
       {error && (

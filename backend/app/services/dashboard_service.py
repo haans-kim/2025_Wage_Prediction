@@ -94,6 +94,47 @@ class DashboardService:
                 "max_value": 3.0,
                 "unit": "배",
                 "current_value": 1.5
+            },
+            # 상위 Feature Importance 변수들 추가
+            "labor_cost_rate_sbl": {
+                "name": "SBL 인건비 비중",
+                "description": "총 비용 대비 인건비 비율 (%)",
+                "min_value": 10.0,
+                "max_value": 50.0,
+                "unit": "%",
+                "current_value": 25.0
+            },
+            "cpi_kr": {
+                "name": "소비자물가상승률",
+                "description": "한국 소비자물가지수 상승률 (%)",
+                "min_value": 0.0,
+                "max_value": 8.0,
+                "unit": "%",
+                "current_value": 2.5
+            },
+            "labor_cost_ratio_change_sbl": {
+                "name": "인건비 비중 변화율",
+                "description": "전년 대비 인건비 비중 변화 (%p)",
+                "min_value": -10.0,
+                "max_value": 10.0,
+                "unit": "%p",
+                "current_value": 0.0
+            },
+            "labor_cost_per_employee_sbl": {
+                "name": "SBL 인당 인건비",
+                "description": "직원 1명당 인건비 (억원)",
+                "min_value": 50.0,
+                "max_value": 200.0,
+                "unit": "억원",
+                "current_value": 100.0
+            },
+            "eci_usa": {
+                "name": "미국 임금비용지수",
+                "description": "미국 고용비용지수 상승률 (%)",
+                "min_value": 1.0,
+                "max_value": 8.0,
+                "unit": "%",
+                "current_value": 3.0
             }
         }
     
@@ -120,7 +161,7 @@ class DashboardService:
                         # 기본 feature 리스트 (실제 데이터 기반)
                         feature_columns = [
                             'gdp_growth_kr', 'cpi_kr', 'unemployment_rate_kr', 'minimum_wage_increase_kr',
-                            'gdp_growth_usa', 'cpi_usa', 'esi_usa', 'exchange_rate_change_krw',
+                            'gdp_growth_usa', 'cpi_usa', 'esi_usa', 'unemployment_rate_us', 'eci_usa', 'exchange_rate_change_krw',
                             'revenue_growth_sbl', 'op_profit_growth_sbl', 'labor_cost_rate_sbl',
                             'labor_cost_ratio_change_sbl', 'labor_cost_per_employee_sbl', 'labor_to_revenue_sbl',
                             'revenue_per_employee_sbl', 'op_profit_per_employee_sbl', 'hcroi_sbl', 'hcva_sbl',
@@ -134,7 +175,7 @@ class DashboardService:
                 # 기본 feature 리스트 사용
                 feature_columns = [
                     'gdp_growth_kr', 'cpi_kr', 'unemployment_rate_kr', 'minimum_wage_increase_kr',
-                    'gdp_growth_usa', 'cpi_usa', 'esi_usa', 'exchange_rate_change_krw',
+                    'gdp_growth_usa', 'cpi_usa', 'esi_usa', 'unemployment_rate_us', 'eci_usa', 'exchange_rate_change_krw',
                     'revenue_growth_sbl', 'op_profit_growth_sbl', 'labor_cost_rate_sbl',
                     'labor_cost_ratio_change_sbl', 'labor_cost_per_employee_sbl', 'labor_to_revenue_sbl',
                     'revenue_per_employee_sbl', 'op_profit_per_employee_sbl', 'hcroi_sbl', 'hcva_sbl',
@@ -146,11 +187,22 @@ class DashboardService:
             # 변수 매핑: Dashboard 변수 → 실제 데이터 컬럼
             # 영향요인 분석 결과 기반으로 가장 중요한 변수들 매핑
             variable_mapping = {
-                'wage_increase_bu_group': ('wage_increase_bu_group', 0.01),  # 3.0% → 0.03 (가장 중요!)
+                # 기존 변수들
+                'wage_increase_bu_group': ('wage_increase_bu_group', 0.01),  # 3.0% → 0.03
                 'gdp_growth': ('gdp_growth_kr', 0.01),      # 2.8% → 0.028
                 'unemployment_rate': ('unemployment_rate_kr', 0.01),  # 3.2% → 0.032
                 'market_size_growth_rate': ('market_size_growth_rate', 0.01),  # 5.0% → 0.05
-                'hcroi_sbl': ('hcroi_sbl', 1.0)  # 1.5배 → 1.5 (비율이므로 그대로)
+                'hcroi_sbl': ('hcroi_sbl', 1.0),  # 1.5배 → 1.5 (비율이므로 그대로)
+                # 상위 Feature Importance 변수들 추가 (실제 feature 이름으로 수정)
+                'labor_cost_rate_sbl': ('labor_to_revenue_sbl', 0.01),  # 25.0% → 0.25 (실제는 labor_to_revenue_sbl)
+                'cpi_kr': ('cpi_kr', 0.01),  # 2.5% → 0.025
+                'labor_cost_ratio_change_sbl': ('labor_cost_ratio_change_sbl', 0.01),  # 0.0%p → 0.00
+                'labor_cost_per_employee_sbl': ('labor_cost_per_employee_sbl', 100000000),  # 100억원 → 100억원 (실제 단위)
+                'eci_usa': ('eci_usa', 0.01),  # 3.0% → 0.03
+                # 콘솔 데이터 기준 추가 매핑
+                'op_profit_growth_sbl': ('op_profit_growth_sbl', 0.01),  # 영업이익 증가율
+                'unemployment_rate_us': ('unemployment_rate_us', 0.01),  # 미국 실업률  
+                'wage_increase_bu_sbl': ('wage_increase_bu_sbl', 0.01)   # SBL Base-up 인상률
             }
             
             # 데이터에서 수치형 값들의 평균값 계산 (결측값과 '-' 제외)
@@ -205,6 +257,15 @@ class DashboardService:
             
             print(f"📊 Model input prepared with {len(input_data)} features")
             
+            # 중요한 변수들의 값 로깅
+            important_vars = ['labor_to_revenue_sbl', 'labor_cost_rate_sbl', 'cpi_kr', 'unemployment_rate_kr', 'wage_increase_bu_group']
+            print("🔍 중요 변수 값들:")
+            for var in important_vars:
+                if var in input_data:
+                    original_val = input_data[var]
+                    percent_val = original_val * 100
+                    print(f"   {var}: {original_val:.4f} ({percent_val:.2f}%)")
+            
             # DataFrame 생성 시 컬럼 순서 보장
             result_df = pd.DataFrame([input_data], columns=feature_columns)
             print(f"✅ DataFrame shape: {result_df.shape}, columns: {list(result_df.columns)[:5]}...")
@@ -214,10 +275,10 @@ class DashboardService:
             logging.error(f"Error preparing model input: {str(e)}")
             print(f"❌ Error details: {e}")
             
-            # 폴백: 29개 feature로 기본 DataFrame 생성
+            # 폴백: 31개 feature로 기본 DataFrame 생성 (누락된 feature 추가)
             default_features = [
                 'gdp_growth_kr', 'cpi_kr', 'unemployment_rate_kr', 'minimum_wage_increase_kr',
-                'gdp_growth_usa', 'cpi_usa', 'esi_usa', 'exchange_rate_change_krw',
+                'gdp_growth_usa', 'cpi_usa', 'esi_usa', 'unemployment_rate_us', 'eci_usa', 'exchange_rate_change_krw',
                 'revenue_growth_sbl', 'op_profit_growth_sbl', 'labor_cost_rate_sbl',
                 'labor_cost_ratio_change_sbl', 'labor_cost_per_employee_sbl', 'labor_to_revenue_sbl',
                 'revenue_per_employee_sbl', 'op_profit_per_employee_sbl', 'hcroi_sbl', 'hcva_sbl',
@@ -242,6 +303,10 @@ class DashboardService:
                     default_data[col] = 0.025  # 기본 인플레이션 2.5%
                 elif col == 'minimum_wage_increase_kr':
                     default_data[col] = 0.025  # 기본 최저임금인상률 2.5%
+                elif col == 'unemployment_rate_us':
+                    default_data[col] = 0.035  # 기본 미국 실업률 3.5%
+                elif col == 'eci_usa':
+                    default_data[col] = 0.03   # 기본 미국 임금비용지수 3.0%
                 else:
                     default_data[col] = 0.02  # 기본값
             
@@ -759,19 +824,14 @@ class DashboardService:
                     from app.services.modeling_service import modeling_service
                     if modeling_service.current_model and not has_2026:
                         try:
-                            # 실제 모델 예측 수행
-                            default_input = {
-                                'wage_increase_bu_group': 3.0,
-                                'gdp_growth': 2.8,
-                                'unemployment_rate': 3.2,
-                                'market_size_growth_rate': 5.0,
-                                'hcroi_sbl': 1.5
-                            }
+                            # 현재 변수 설정값 사용 (사용자 조정값 반영)
+                            current_values = self.get_available_variables()['current_values']
+                            chart_input = current_values.copy()
                             
                             # 예측 수행
                             prediction_result = self.predict_wage_increase(
                                 modeling_service.current_model,
-                                default_input,
+                                chart_input,
                                 confidence_level=0.95
                             )
                             

@@ -110,10 +110,22 @@ export const Dashboard: React.FC = () => {
   const [scenarioResults, setScenarioResults] = useState<any[]>([]);
   const [trendData, setTrendData] = useState<any>(null);
   const [featureImportance, setFeatureImportance] = useState<any>(null);
+  
+  // 디바운스 타이머 state 추가 (선언을 위쪽으로 이동)
+  const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadDashboardData();
   }, []);
+  
+  // 컴포넌트 언마운트 시 타이머 정리
+  useEffect(() => {
+    return () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+    };
+  }, [debounceTimer]);
 
   const loadDashboardData = async () => {
     setLoading('initial');
@@ -184,24 +196,42 @@ export const Dashboard: React.FC = () => {
   };
 
   const handleVariableChange = (variableName: string, value: number) => {
-    setCustomVariables(prev => ({
-      ...prev,
+    const newVariables = {
+      ...customVariables,
       [variableName]: value
-    }));
+    };
+    setCustomVariables(newVariables);
+    
+    // 슬라이더 변경 시 자동으로 예측 실행 (디바운스 적용)
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    
+    const timer = setTimeout(() => {
+      handleCustomPrediction(newVariables);
+    }, 500); // 500ms 디바운스
+    
+    setDebounceTimer(timer);
   };
 
-  const handleCustomPrediction = async () => {
+  const handleCustomPrediction = async (variables?: Record<string, number>) => {
     setLoading('custom-prediction');
     setError(null);
 
     try {
-      const predictionRes = await apiClient.predictWageIncrease(customVariables);
+      const variablesToUse = variables || customVariables;
+      const predictionRes = await apiClient.predictWageIncrease(variablesToUse);
       setCurrentPrediction(predictionRes);
     } catch (error) {
       setError(error instanceof Error ? error.message : '사용자 정의 예측 중 오류가 발생했습니다.');
     } finally {
       setLoading(null);
     }
+  };
+
+  // 버튼 클릭용 래퍼 함수
+  const handleCustomPredictionClick = () => {
+    handleCustomPrediction();
   };
 
   const handleRunScenarioAnalysis = async () => {
@@ -235,16 +265,105 @@ export const Dashboard: React.FC = () => {
     return percentage.toFixed(decimals);
   };
 
+  const getTopImportantVariables = () => {
+    // Feature Importance가 없으면 기본 5개 변수 반환
+    if (!featureImportance || !featureImportance.feature_importance) {
+      return availableVariables.slice(0, 5);
+    }
+
+    // Feature 이름을 Dashboard 변수 이름으로 매핑 (올바른 Feature Importance 기준)
+    const featureToVariableMap: { [key: string]: string } = {
+      // 기존 변수들
+      'wage_increase_bu_group': 'wage_increase_bu_group',
+      'gdp_growth_kr': 'gdp_growth',
+      'market_size_growth_rate': 'market_size_growth_rate',
+      'hcroi_sbl': 'hcroi_sbl',
+      'unemployment_rate_kr': 'unemployment_rate',
+      // 올바른 상위 Feature Importance (이전 스크린샷 기준)
+      'labor_to_revenue_sbl': 'labor_cost_rate_sbl',        // 1. 인건비 비중 (3.5%)
+      'cpi_kr': 'cpi_kr',                                   // 2. 소비자물가상승률 (3.0%)
+      'eci_usa': 'eci_usa',                                 // 3. 미국 임금비용지수 (2.0%)
+      'labor_cost_per_employee_sbl': 'labor_cost_per_employee_sbl',  // 4. 인당 인건비 (1.8%)
+      'labor_cost_ratio_change_sbl': 'labor_cost_ratio_change_sbl'   // 기타 변수
+    };
+
+    // 모든 Feature Importance를 순회하면서 Dashboard 변수에 매핑되는 것들 찾기
+    interface MappedFeature {
+      variable: Variable;
+      importance: number;
+      feature: string;
+    }
+    const mappedFeatures: MappedFeature[] = [];
+    for (const featureItem of featureImportance.feature_importance) {
+      const featureName = featureItem.feature;
+      const variableName = featureToVariableMap[featureName];
+      
+      if (variableName) {
+        const variable = availableVariables.find(v => v.name === variableName);
+        if (variable) {
+          mappedFeatures.push({
+            variable,
+            importance: featureItem.importance,
+            feature: featureName
+          });
+        }
+      }
+    }
+
+    // 중요도 순으로 정렬
+    mappedFeatures.sort((a, b) => b.importance - a.importance);
+    
+    // 상위 Feature들 선택 (최대 5개)
+    const importantVariables: Variable[] = mappedFeatures
+      .slice(0, Math.min(5, mappedFeatures.length))
+      .map(item => item.variable);
+
+    // 5개가 안 되면 나머지를 기본 변수로 채움
+    if (importantVariables.length < 5) {
+      const remainingCount = 5 - importantVariables.length;
+      const remainingVariables = availableVariables
+        .filter(v => !importantVariables.some(iv => iv.name === v.name))
+        .slice(0, remainingCount);
+      importantVariables.push(...remainingVariables);
+    }
+
+    console.log('🔍 Feature Importance Debug:');
+    console.log('Available variables:', availableVariables.map(v => `${v.name}: ${v.display_name}`));
+    console.log('Feature importance data:', featureImportance?.feature_importance?.slice(0, 5));
+    console.log('Feature to variable mapping:', featureToVariableMap);
+    console.log('Mapped features:', mappedFeatures.map(mf => `${mf.feature} → ${mf.variable.name} (${mf.variable.display_name}) - ${(mf.importance * 100).toFixed(1)}%`));
+    console.log('Final important variables for sliders:', 
+      importantVariables.map((v, i) => {
+        const mapped = mappedFeatures.find(mf => mf.variable.name === v.name);
+        return `${i+1}. ${v.name}: ${v.display_name}${mapped ? ` (${(mapped.importance * 100).toFixed(1)}%)` : ' (default)'}`;
+      })
+    );
+    
+    return importantVariables;
+  };
+
   const getChartData = () => {
     if (!trendData || !trendData.trend_data) return null;
 
     const labels = trendData.trend_data.map((d: any) => d.year);
     
-    // 총 인상률
-    const totalData = trendData.trend_data.map((d: any) => d.value);
+    // 총 인상률 (2026년은 현재 예측값으로 덮어쓰기)
+    const totalData = trendData.trend_data.map((d: any) => {
+      if (d.year === 2026 && currentPrediction) {
+        // 현재 예측값을 퍼센트로 변환하여 사용
+        return currentPrediction.prediction * 100;
+      }
+      return d.value;
+    });
     
-    // Base-up 데이터 (있는 경우만)
-    const baseupData = trendData.trend_data.map((d: any) => d.base_up);
+    // Base-up 데이터 (2026년은 현재 예측값으로 덮어쓰기)
+    const baseupData = trendData.trend_data.map((d: any) => {
+      if (d.year === 2026 && currentPrediction && currentPrediction.base_up_rate) {
+        // 현재 Base-up 예측값을 퍼센트로 변환하여 사용
+        return currentPrediction.base_up_rate * 100;
+      }
+      return d.base_up;
+    });
     const hasBaseupData = baseupData.some((v: any) => v !== null && v !== undefined);
     
     // 2026년 예측값 인덱스 찾기
@@ -375,7 +494,9 @@ export const Dashboard: React.FC = () => {
           },
           afterLabel: (context: any) => {
             const dataPoint = trendData.trend_data[context.dataIndex];
-            if (dataPoint?.type === 'prediction') {
+            if (dataPoint?.type === 'prediction' && 
+                dataPoint.confidence_lower !== undefined && 
+                dataPoint.confidence_upper !== undefined) {
               return `신뢰구간: ${dataPoint.confidence_lower.toFixed(1)}% - ${dataPoint.confidence_upper.toFixed(1)}%`;
             }
             return '';
@@ -706,7 +827,7 @@ export const Dashboard: React.FC = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {availableVariables.slice(0, 8).map((variable) => (
+              {getTopImportantVariables().map((variable) => (
                 <div key={variable.name} className="space-y-2">
                   <div className="flex justify-between items-center">
                     <label className="text-sm font-medium">{variable.display_name}</label>
@@ -731,7 +852,7 @@ export const Dashboard: React.FC = () => {
               ))}
 
               <Button 
-                onClick={handleCustomPrediction}
+                onClick={handleCustomPredictionClick}
                 disabled={loading === 'custom-prediction'}
                 className="w-full"
               >

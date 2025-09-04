@@ -39,13 +39,37 @@ class ExplainerDashboardService:
             if self.is_running:
                 self.stop_dashboard()
             
-            # X_test의 컬럼이 이미 올바른 feature 이름을 가지고 있는지 확인
+            # 모델이 훈련된 실제 feature 이름들 가져오기
+            if hasattr(model, 'feature_names_in_'):
+                model_features = list(model.feature_names_in_)
+                logger.info(f"Model was trained with features: {model_features[:5]}...")
+            else:
+                # PyCaret 모델의 경우 다른 방법 시도
+                try:
+                    from pycaret.regression import get_config
+                    model_features = list(get_config('X_train').columns)
+                    logger.info(f"PyCaret model features: {model_features[:5]}...")
+                except:
+                    model_features = feature_names
+                    logger.warning("Could not determine model features, using provided feature_names")
+            
+            # X_test를 모델이 훈련된 feature만 포함하도록 필터링
             if hasattr(X_test, 'columns'):
                 actual_features = list(X_test.columns)
-                # feature_names와 X_test.columns가 일치하지 않으면 매핑
-                if actual_features != feature_names:
-                    logger.info(f"Mapping columns: {actual_features[:3]} -> {feature_names[:3]}")
-                    X_test.columns = feature_names
+                
+                # 모델이 훈련된 feature만 선택
+                common_features = [f for f in model_features if f in actual_features]
+                if len(common_features) != len(model_features):
+                    logger.warning(f"Feature mismatch: model expects {len(model_features)}, "
+                                 f"but X_test has {len(common_features)} matching features")
+                    logger.info(f"Model features: {model_features}")
+                    logger.info(f"X_test features: {actual_features}")
+                    logger.info(f"Common features: {common_features}")
+                
+                # X_test를 모델 feature에 맞게 필터링
+                X_test = X_test[common_features].copy()
+                feature_names = common_features
+                logger.info(f"Filtered X_test to shape: {X_test.shape} with features: {feature_names[:5]}...")
             
             # data_service에서 한글 컬럼명 가져오기
             feature_descriptions = data_service.get_display_names(feature_names)
@@ -112,6 +136,54 @@ class ExplainerDashboardService:
                     X_test_copy = X_test_copy.iloc[original_indices]
                     y_test = y_test.iloc[original_indices] if y_test is not None else None
                     
+            # y_test 형태 및 타입 확인 및 수정
+            if y_test is not None:
+                logger.info(f"Original y_test type: {type(y_test)}, shape: {getattr(y_test, 'shape', 'no shape')}")
+                
+                # numpy array나 scalar인 경우 pandas Series로 변환
+                if isinstance(y_test, (int, float, np.number)):
+                    # 단일 스칼라값인 경우
+                    logger.info("Converting scalar y_test to Series")
+                    y_test = pd.Series([float(y_test)])
+                elif isinstance(y_test, np.ndarray):
+                    if y_test.ndim == 0:  # 0차원 배열 (스칼라)
+                        logger.info("Converting 0-dim array y_test to Series")
+                        y_test = pd.Series([float(y_test.item())])
+                    elif y_test.ndim == 1 and len(y_test) == 1:  # 길이 1인 1차원 배열
+                        logger.info("Converting single-element array y_test to Series")
+                        y_test = pd.Series([float(y_test[0])])
+                    else:
+                        logger.info("Converting numpy array y_test to Series")
+                        y_test = pd.Series(y_test.flatten())
+                
+                # pandas Series가 아닌 경우 변환
+                if not isinstance(y_test, pd.Series):
+                    logger.info(f"Converting {type(y_test)} y_test to Series")
+                    if hasattr(y_test, '__len__') and len(y_test) > 0:
+                        y_test = pd.Series(list(y_test))
+                    else:
+                        # 빈 데이터이거나 길이를 알 수 없는 경우 기본값 사용
+                        y_test = pd.Series([0.05])  # 5% 기본 인상률
+                
+                # X_test와 길이 맞추기
+                if len(y_test) != len(X_test_copy):
+                    if len(y_test) == 1:
+                        # y_test가 단일값이면 X_test 길이에 맞게 복제
+                        logger.info(f"Replicating single y_test value to match X_test length: {len(X_test_copy)}")
+                        y_test = pd.Series([y_test.iloc[0]] * len(X_test_copy))
+                    else:
+                        # 길이가 다르면 최소 길이로 맞춤
+                        min_len = min(len(y_test), len(X_test_copy))
+                        logger.info(f"Truncating to minimum length: {min_len}")
+                        y_test = y_test.iloc[:min_len]
+                        X_test_copy = X_test_copy.iloc[:min_len]
+                
+                logger.info(f"Final y_test type: {type(y_test)}, length: {len(y_test)}, values: {y_test.values[:3] if len(y_test) > 0 else 'empty'}")
+            else:
+                # y_test가 None인 경우 더미 데이터 생성
+                logger.warning("y_test is None, creating dummy target values")
+                y_test = pd.Series([0.05] * len(X_test_copy))  # 5% 기본 인상률
+            
             # 인덱스를 연도로 설정
             num_samples = len(X_test_copy)
             if num_samples <= 10:
@@ -121,7 +193,9 @@ class ExplainerDashboardService:
             else:
                 # 여전히 많은 데이터가 있는 경우
                 years = [f"데이터_{i+1}" for i in range(num_samples)]
+            
             X_test_copy.index = years
+            y_test.index = years
             
             # Explainer 생성 (회귀 모델) - 기본 파라미터만 사용
             explainer = RegressionExplainer(

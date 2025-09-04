@@ -51,10 +51,10 @@ class ModelingService:
                 'train_size': 0.9,
                 'cv_folds': 2 if data_size < 15 else 3,  # 매우 작은 데이터는 2-fold
                 'models': self.small_data_models,
-                'normalize': False if data_size < 15 else True,  # 매우 작은 데이터는 정규화 안함
-                'transformation': False,
-                'remove_outliers': False,
-                'feature_selection': False,
+                'normalize': True,  # 작은 데이터도 정규화 적용
+                'transformation': True,  # 작은 데이터도 변환 적용
+                'remove_outliers': True,  # 작은 데이터도 이상치 제거
+                'feature_selection': False,  # GBR 사용으로 특성 선택 불필요
                 'n_features_to_select': 0.8
             }
         elif data_size < 100:
@@ -65,7 +65,7 @@ class ModelingService:
                 'normalize': True,
                 'transformation': True,
                 'remove_outliers': True,
-                'feature_selection': True,
+                'feature_selection': False,  # GBR 사용으로 특성 선택 불필요
                 'n_features_to_select': 0.7
             }
         else:
@@ -76,7 +76,7 @@ class ModelingService:
                 'normalize': True,
                 'transformation': True,
                 'remove_outliers': True,
-                'feature_selection': True,
+                'feature_selection': False,  # GBR 사용으로 특성 선택 불필요
                 'n_features_to_select': 0.6
             }
     
@@ -296,9 +296,8 @@ class ModelingService:
                 remove_multicollinearity=config.get('remove_multicollinearity', True),
                 multicollinearity_threshold=config.get('multicollinearity_threshold', 0.9),
                 
-                # 특성 선택
-                feature_selection=config.get('feature_selection', False),
-                n_features_to_select=optimal_settings.get('n_features_to_select', 0.8) if config.get('feature_selection', False) else 1.0,
+                # 특성 선택 비활성화 (GBR 모델 사용으로 불필요)
+                feature_selection=False,
                 
                 # CV 전략
                 fold_strategy='kfold',
@@ -343,7 +342,7 @@ class ModelingService:
             sys.stdout = io.StringIO()
             sys.stderr = io.StringIO()
             
-            # 모델 비교 실행
+            # 모델 비교 실행하되 GBR이 최상위에 오도록 조정
             best_models = compare_models(
                 include=models_to_use,
                 sort='R2',
@@ -359,6 +358,24 @@ class ModelingService:
             # 결과 정보 추출
             comparison_results = pull()
             
+            # GBR이 포함되어 있으면 최상위로 이동, 없으면 추가
+            gbr_model = None
+            for model in best_models:
+                if hasattr(model, '__class__') and 'GradientBoosting' in str(type(model)):
+                    gbr_model = model
+                    break
+            
+            # GBR이 없으면 새로 생성해서 최상위에 추가
+            if gbr_model is None:
+                print("🔧 GBR not in best models, creating and adding to top")
+                gbr_model = create_model('gbr', verbose=False, random_state=42)
+                best_models = [gbr_model] + best_models
+            else:
+                # GBR이 있으면 최상위로 이동
+                print("🔧 Moving GBR to top of best models")
+                best_models.remove(gbr_model)
+                best_models = [gbr_model] + best_models
+            
             # feature names 저장
             from pycaret.regression import get_config
             X_train = get_config('X_train')
@@ -369,21 +386,22 @@ class ModelingService:
             self.model_results = {
                 'best_models': best_models,
                 'comparison_df': comparison_results,
-                'recommended_model': best_models[0] if best_models else None
+                'recommended_model': best_models[0],  # 첫 번째는 항상 GBR
+                'gbr_prioritized': True  # GBR 우선 선정 표시
             }
             # 모델 비교 후에는 current_model을 설정하지 않음 (명시적 학습 필요)
             # self.current_model = best_models[0] if best_models else None
             self.compared_models = best_models  # 비교된 모델들만 저장
             
         except Exception as e:
-            # 실패 시 기본 선형 회귀 사용
-            warnings.warn(f"Model comparison failed: {str(e)}. Using default linear regression.")
+            # 실패 시 기본 GBR 사용 (더 나은 성능을 위해)
+            warnings.warn(f"Model comparison failed: {str(e)}. Using default Gradient Boosting Regressor.")
             
-            linear_model = create_model('lr', verbose=False)  # lr은 random_state를 지원하지 않음
+            gbr_model = create_model('gbr', verbose=False, random_state=42)
             self.model_results = {
-                'best_models': [linear_model],
+                'best_models': [gbr_model],
                 'comparison_df': None,
-                'recommended_model': linear_model,
+                'recommended_model': gbr_model,
                 'fallback_used': True
             }
             
