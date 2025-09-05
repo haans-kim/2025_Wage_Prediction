@@ -260,9 +260,9 @@ export const Dashboard: React.FC = () => {
 
   const formatPrediction = (num: number, decimals: number = 1) => {
     // 백엔드에서 받은 소수점 값(0.0577)을 퍼센트(5.77%)로 변환
-    // 정확한 반올림 처리
+    // 정확한 반올림 처리 - 소수점 첫째자리에서 반올림
     const percentage = num * 100;
-    return percentage.toFixed(decimals);
+    return Math.round(percentage * 10) / 10;  // 소수점 첫째자리에서 정확한 반올림
   };
 
   const getTopImportantVariables = () => {
@@ -744,7 +744,8 @@ export const Dashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-primary">
-              {currentPrediction ? `${formatPrediction(currentPrediction.prediction, 1)}%` : '-.-%'}
+              {currentPrediction?.breakdown ? `${currentPrediction.breakdown.total.percentage.toFixed(1)}%` : 
+               currentPrediction ? `${formatPrediction(currentPrediction.prediction, 1)}%` : '-.-%'}
             </div>
           </CardContent>
         </Card>
@@ -757,7 +758,8 @@ export const Dashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              {currentPrediction?.breakdown ? `${formatPrediction(currentPrediction.breakdown.base_up.rate, 1)}%` : '-.-%'}
+              {currentPrediction?.breakdown ? 
+                `${(currentPrediction.breakdown.total.percentage - currentPrediction.breakdown.performance.percentage).toFixed(1)}%` : '-.-%'}
             </div>
             {currentPrediction?.breakdown && (
               <div className="text-xs text-muted-foreground mt-1">
@@ -776,7 +778,7 @@ export const Dashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {currentPrediction?.breakdown ? `${formatPrediction(currentPrediction.breakdown.performance.rate, 1)}%` : '-.-%'}
+              {currentPrediction?.breakdown ? `${currentPrediction.breakdown.performance.percentage.toFixed(1)}%` : '-.-%'}
             </div>
             {currentPrediction?.breakdown && (
               <div className="text-xs text-muted-foreground mt-1">
@@ -797,15 +799,15 @@ export const Dashboard: React.FC = () => {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">GDP:</span>
-                <span className="font-medium">{economicIndicators.gdp_growth?.value || '-'}%</span>
+                <span className="font-medium">{`${economicIndicators.current_gdp_growth || '-'}%`}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">인플레:</span>
-                <span className="font-medium">{economicIndicators.inflation_rate?.value || '-'}%</span>
+                <span className="font-medium">{`${economicIndicators.current_inflation || '-'}%`}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">실업률:</span>
-                <span className="font-medium">{economicIndicators.unemployment_rate?.value || '-'}%</span>
+                <span className="font-medium">{`${economicIndicators.current_unemployment || '-'}%`}</span>
               </div>
             </div>
           </CardContent>

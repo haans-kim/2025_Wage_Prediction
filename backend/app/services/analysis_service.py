@@ -67,6 +67,9 @@ class AnalysisService:
             return X_train, y_train, X_test, y_test
             
         except Exception as e:
+            print(f"Warning: Could not get PyCaret data: {str(e)}")
+            # PyCaret 환경이 설정되어 있지 않으면 ExplainerDashboard 생성을 포기
+            raise ValueError("PyCaret environment is required for ExplainerDashboard")
             logging.warning(f"Could not get PyCaret data: {str(e)}")
             # Fallback to data_service
             if data_service.current_data is not None:
@@ -218,9 +221,18 @@ class AnalysisService:
                     importance_scores = np.abs(shap_values).mean(axis=0)
                 else:
                     importance_scores = np.abs(shap_values)
+                
+                # SHAP 값들이 0~1 스케일인 경우 퍼센트로 변환 (100배)
+                if np.max(importance_scores) < 0.5:  # 모든 값이 0.5 미만이면 비율로 간주
+                    importance_scores = importance_scores * 100
+                    print(f"📊 Scaled SHAP values to percentage scale")
+                
                 print(f"📊 Importance scores: shape={importance_scores.shape}, values={importance_scores[:5]}")
             else:
                 importance_scores = np.abs(shap_values[0]).mean(axis=0) if len(shap_values) > 0 else []
+                # 스케일링 적용
+                if len(importance_scores) > 0 and np.max(importance_scores) < 0.5:
+                    importance_scores = importance_scores * 100
             
             # 값이 모두 0인지 확인
             if np.all(importance_scores == 0):

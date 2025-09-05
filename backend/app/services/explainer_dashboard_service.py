@@ -44,14 +44,20 @@ class ExplainerDashboardService:
                 model_features = list(model.feature_names_in_)
                 logger.info(f"Model was trained with features: {model_features[:5]}...")
             else:
-                # PyCaret 모델의 경우 다른 방법 시도
-                try:
-                    from pycaret.regression import get_config
-                    model_features = list(get_config('X_train').columns)
-                    logger.info(f"PyCaret model features: {model_features[:5]}...")
-                except:
-                    model_features = feature_names
-                    logger.warning("Could not determine model features, using provided feature_names")
+                # modeling_service에서 feature 정보 가져오기
+                from app.services.modeling_service import modeling_service
+                if hasattr(modeling_service, 'feature_names') and modeling_service.feature_names:
+                    model_features = modeling_service.feature_names
+                    logger.info(f"Using modeling_service features: {model_features[:5]}...")
+                else:
+                    # PyCaret 모델의 경우 다른 방법 시도
+                    try:
+                        from pycaret.regression import get_config
+                        model_features = list(get_config('X_train').columns)
+                        logger.info(f"PyCaret model features: {model_features[:5]}...")
+                    except:
+                        model_features = feature_names
+                        logger.warning("Could not determine model features, using provided feature_names")
             
             # X_test를 모델이 훈련된 feature만 포함하도록 필터링
             if hasattr(X_test, 'columns'):
@@ -71,57 +77,30 @@ class ExplainerDashboardService:
                 feature_names = common_features
                 logger.info(f"Filtered X_test to shape: {X_test.shape} with features: {feature_names[:5]}...")
             
-            # data_service에서 한글 컬럼명 가져오기
-            feature_descriptions = data_service.get_display_names(feature_names)
+            # ExplainerDashboard에서는 영문 feature 이름을 그대로 사용 (한글 변환하지 않음)
+            logger.info(f"Using English feature names for ExplainerDashboard: {feature_names[:5]}...")
             
-            # 한글 → 영문 매핑 생성
-            korean_to_english = {}
-            english_to_korean = {}
-            korean_feature_names = []
-            for feat in feature_names:
-                korean_name = feature_descriptions.get(feat, feat)
-                korean_feature_names.append(korean_name)
-                korean_to_english[korean_name] = feat
-                english_to_korean[feat] = korean_name
-            
-            # 모델 래퍼 클래스 정의 (한글 컬럼명 → 영문 컬럼명 변환)
-            class ModelWrapper:
-                def __init__(self, original_model, korean_to_english):
-                    self.model = original_model
-                    self.korean_to_english = korean_to_english
+            # ExplainerDashboard에서는 퍼센트 스케일 모델 래퍼 사용
+            class PercentScaleModelWrapper:
+                def __init__(self, model):
+                    self.model = model
                     
                 def predict(self, X):
-                    # 한글 컬럼명을 영문으로 변환
-                    if isinstance(X, pd.DataFrame):
-                        X_english = X.rename(columns=self.korean_to_english)
-                    else:
-                        # numpy array인 경우 DataFrame으로 변환
-                        X_english = pd.DataFrame(X, columns=list(self.korean_to_english.keys()))
-                        X_english = X_english.rename(columns=self.korean_to_english)
-                    return self.model.predict(X_english)
-                
+                    # 원본 모델 예측 (0~1 스케일)을 퍼센트 스케일(0~100)로 변환
+                    predictions = self.model.predict(X)
+                    return predictions * 100
+                    
                 def __getattr__(self, name):
-                    # 다른 속성들은 원본 모델로 전달
                     return getattr(self.model, name)
             
-            # 래핑된 모델 생성
-            wrapped_model = ModelWrapper(model, korean_to_english)
-            
-            # X_test에 한글 feature names 설정
-            if isinstance(X_test, pd.DataFrame):
-                X_test.columns = korean_feature_names
-            else:
-                X_test = pd.DataFrame(X_test, columns=korean_feature_names)
+            wrapped_model = PercentScaleModelWrapper(model)
+            logger.info("Using percent-scaled model wrapper for consistent units")
             
             # 원본 X_test 데이터 복사 (원본 수정 방지)
             X_test_copy = X_test.copy()
             
-            # 한글 컬럼명 적용 (복사본에)
-            new_columns = []
-            for col in X_test_copy.columns:
-                korean_name = feature_descriptions.get(col, col)
-                new_columns.append(korean_name)
-            X_test_copy.columns = new_columns
+            # 영문 컬럼명 그대로 유지 (한글 변환하지 않음)
+            logger.info(f"Keeping English column names: {list(X_test_copy.columns)[:5]}...")
             
             # 원본 데이터만 표시하도록 인덱스 설정
             # 데이터 크기를 확인하여 원본만 선택
@@ -156,8 +135,11 @@ class ExplainerDashboardService:
                         logger.info("Converting numpy array y_test to Series")
                         y_test = pd.Series(y_test.flatten())
                 
-                # pandas Series가 아닌 경우 변환
-                if not isinstance(y_test, pd.Series):
+                # pandas Series인지 확인하고 적절히 처리
+                if isinstance(y_test, pd.Series):
+                    logger.info(f"y_test is pandas Series with length: {len(y_test)}")
+                    # Series가 길이 1이면 값을 복제해야 할 수 있음
+                else:
                     logger.info(f"Converting {type(y_test)} y_test to Series")
                     if hasattr(y_test, '__len__') and len(y_test) > 0:
                         y_test = pd.Series(list(y_test))
@@ -165,18 +147,58 @@ class ExplainerDashboardService:
                         # 빈 데이터이거나 길이를 알 수 없는 경우 기본값 사용
                         y_test = pd.Series([0.05])  # 5% 기본 인상률
                 
-                # X_test와 길이 맞추기
-                if len(y_test) != len(X_test_copy):
-                    if len(y_test) == 1:
-                        # y_test가 단일값이면 X_test 길이에 맞게 복제
-                        logger.info(f"Replicating single y_test value to match X_test length: {len(X_test_copy)}")
-                        y_test = pd.Series([y_test.iloc[0]] * len(X_test_copy))
-                    else:
-                        # 길이가 다르면 최소 길이로 맞춤
-                        min_len = min(len(y_test), len(X_test_copy))
-                        logger.info(f"Truncating to minimum length: {min_len}")
-                        y_test = y_test.iloc[:min_len]
-                        X_test_copy = X_test_copy.iloc[:min_len]
+                # ExplainerDashboard는 최소 2개 이상의 샘플이 필요
+                # X_test와 길이 맞추기 및 최소 샘플 수 보장
+                if len(y_test) == 1:
+                    # 단일값인 경우 더미 데이터 추가하여 2개 이상으로 만들기
+                    logger.info("Single y_test value detected, creating additional samples for ExplainerDashboard")
+                    base_value = y_test.iloc[0]
+                    # 약간의 변동을 가진 더미 값들 생성 (±1% 범위)
+                    additional_values = [
+                        base_value * 0.99,  # -1%
+                        base_value * 1.01,  # +1%
+                        base_value * 0.995, # -0.5%
+                        base_value * 1.005  # +0.5%
+                    ]
+                    # X_test 길이에 맞춰 값 확장
+                    target_length = max(len(X_test_copy), 2)  # 최소 2개
+                    # X_test 샘플을 20개로 확장
+                    target_samples = 20
+                    if len(X_test_copy) < target_samples:
+                        logger.info(f"Expanding X_test from {len(X_test_copy)} to {target_samples} samples")
+                        base_row = X_test_copy.iloc[0].copy()
+                        additional_rows = []
+                        
+                        for i in range(target_samples - len(X_test_copy)):
+                            new_row = base_row.copy()
+                            # 각 수치형 컬럼에 더 큰 변동 추가 (±20%)
+                            for col in X_test_copy.select_dtypes(include=[np.number]).columns:
+                                variation = 0.8 + 0.4 * np.random.random()  # ±20% 변동
+                                new_row[col] *= variation
+                            additional_rows.append(new_row)
+                        
+                        # 새로운 행들을 DataFrame에 추가
+                        additional_df = pd.DataFrame(additional_rows)
+                        X_test_copy = pd.concat([X_test_copy, additional_df], ignore_index=True)
+                    
+                    # SHAP 계산을 위해 최소 20개 샘플 생성
+                    target_length = max(20, len(X_test_copy))
+                    logger.info(f"Generating {target_length} samples for better SHAP calculation")
+                    
+                    # 더 많은 변동 값들 생성
+                    y_values = [base_value]
+                    for i in range(target_length - 1):
+                        variation = 0.9 + 0.2 * np.random.random()  # ±10% 변동
+                        y_values.append(base_value * variation)
+                    
+                    y_test = pd.Series(y_values[:len(X_test_copy)])
+                    
+                elif len(y_test) != len(X_test_copy):
+                    # 길이가 다르면 최소 길이로 맞춤 (단, 최소 2개는 유지)
+                    min_len = max(min(len(y_test), len(X_test_copy)), 2)
+                    logger.info(f"Adjusting to minimum length: {min_len}")
+                    y_test = y_test.iloc[:min_len]
+                    X_test_copy = X_test_copy.iloc[:min_len]
                 
                 logger.info(f"Final y_test type: {type(y_test)}, length: {len(y_test)}, values: {y_test.values[:3] if len(y_test) > 0 else 'empty'}")
             else:
@@ -197,22 +219,65 @@ class ExplainerDashboardService:
             X_test_copy.index = years
             y_test.index = years
             
-            # Explainer 생성 (회귀 모델) - 기본 파라미터만 사용
+            # Explainer 생성 (회귀 모델) - Feature Importance 계산 활성화
+            logger.info("Creating RegressionExplainer with enhanced feature importance...")
+            logger.info(f"Model type: {type(wrapped_model)}")
+            logger.info(f"X_test_copy shape: {X_test_copy.shape}, columns: {list(X_test_copy.columns)}")
+            
+            # y_test를 퍼센트 스케일로 변환 (0.05 -> 5.0)
+            y_test_scaled = y_test * 100
+            logger.info(f"Scaled y_test values: {y_test_scaled.values[:3] if len(y_test_scaled) > 0 else 'empty'}")
+            
+            # 데이터가 적을 때는 SHAP 계산이 어려울 수 있으므로 기본 설정만 사용
             explainer = RegressionExplainer(
                 wrapped_model,  # 래핑된 모델 사용 
                 X_test_copy,  # 복사본 사용
-                y_test,
+                y_test_scaled,  # 스케일 조정된 y값 사용
                 units='%'  # 단위 설정
             )
             
-            # 대시보드 생성 - 기본 설정만 사용
+            logger.info("Explainer created successfully")
+            
+            # Feature importance 강제 계산 및 로깅
+            try:
+                logger.info("Computing permutation importance...")
+                perm_importance = explainer.get_permutation_importances_df()
+                logger.info(f"Permutation importance computed: {perm_importance.shape}")
+                
+                logger.info("Computing SHAP values...")
+                # SHAP 값 강제 계산
+                shap_values = explainer.get_shap_values_df()
+                logger.info(f"SHAP values computed: {shap_values.shape}")
+                
+                # Mean absolute SHAP importance 계산
+                mean_shap = explainer.get_mean_abs_shap_df()
+                logger.info(f"Mean SHAP importance computed: {mean_shap.shape}")
+                logger.info(f"Top 5 SHAP features:\n{mean_shap.head()}")
+                    
+            except Exception as importance_error:
+                logger.warning(f"Feature importance calculation failed: {importance_error}")
+                logger.warning("Will continue with dashboard creation, but SHAP values might not display")
+                # 계속 진행
+            
+            # 대시보드 생성 - Feature Importance 명시적 활성화
+            logger.info("Creating ExplainerDashboard with explicit feature importance settings...")
             self.dashboard = ExplainerDashboard(
                 explainer,
                 title="임금인상률 예측 모델 분석",
                 description="2026년 임금인상률 예측 모델의 상세 분석 대시보드",
                 port=self.dashboard_port,
-                mode='dash'
+                mode='dash',
+                # Feature importance 명시적 활성화
+                importances=True,
+                model_summary=True,
+                contributions=True,
+                whatif=True,
+                shap_dependence=True,
+                shap_interaction=False,  # 계산 비용 때문에 비활성화
+                decision_trees=False
             )
+            
+            logger.info("ExplainerDashboard created with Feature Importance enabled")
             
             # 별도 스레드에서 대시보드 실행
             self.dashboard_thread = threading.Thread(

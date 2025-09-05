@@ -54,6 +54,34 @@ class DashboardService:
             }
         }
         
+        # 변수 매핑: Feature 이름 → Dashboard 변수명
+        self.variable_mapping = {
+            # 기존 변수들
+            'wage_increase_bu_group': ('wage_increase_bu_group', 0.01),  # 3.0% → 0.03
+            'gdp_growth_kr': ('gdp_growth', 0.01),      # 2.8% → 0.028
+            'unemployment_rate_kr': ('unemployment_rate', 0.01),  # 3.2% → 0.032
+            'market_size_growth_rate': ('market_size_growth_rate', 0.01),  # 5.0% → 0.05
+            'hcroi_sbl': ('hcroi_sbl', 1.0),  # 1.5배 → 1.5 (비율이므로 그대로)
+            # 상위 Feature Importance 변수들 추가 (실제 feature 이름으로 수정)
+            'labor_to_revenue_sbl': ('labor_cost_rate_sbl', 0.01),  # 25.0% → 0.25
+            'cpi_kr': ('cpi_kr', 0.01),  # 2.5% → 0.025
+            'labor_cost_per_employee_sbl': ('labor_cost_per_employee_sbl', 100000000),  # 100억원 → 100억원
+            'eci_usa': ('eci_usa', 0.01),  # 3.0% → 0.03
+            # 추가 매핑
+            'op_profit_growth_sbl': ('op_profit_growth_sbl', 0.01),  # 영업이익 증가율
+            'unemployment_rate_us': ('unemployment_rate_us', 0.01),  # 미국 실업률
+            'revenue_growth_sbl': ('revenue_growth_sbl', 0.01),  # 매출액 증가율
+            'wage_increase_mi_group': ('wage_increase_mi_group', 0.01),  # 그룹 성과 인상률
+            'exchange_rate_change_krw': ('exchange_rate_change_krw', 0.01),  # 환율변화율
+            'minimum_wage_increase_kr': ('minimum_wage_increase_kr', 0.01),  # 최저임금인상률
+            'wage_increase_total_sbl': ('wage_increase_total_sbl', 0.01),  # 총 인상률
+            'compensation_competitiveness': ('compensation_competitiveness', 0.01),  # 보상경쟁력
+            'gdp_growth_usa': ('gdp_growth_usa', 0.01),  # 미국 GDP 성장률
+            'public_sector_wage_increase': ('public_sector_wage_increase', 0.01),  # 공공기관 임금인상률
+            'hcva_sbl': ('hcva_sbl', 1.0),  # HCVA
+            'wage_increase_ce': ('wage_increase_ce', 0.01)  # c사 임금인상률
+        }
+
         self.variable_definitions = {
             "wage_increase_bu_group": {
                 "name": "그룹 Base-up 인상률",
@@ -597,21 +625,21 @@ class DashboardService:
                 "breakdown": {
                     "base_up": {
                         "rate": base_up_rate,
-                        "percentage": round(base_up_rate * 100, 2),
+                        "percentage": round(base_up_rate * 100, 1),  # 소수점 첫째자리
                         "description": "기본 인상분",
                         "calculation": "총 인상률 - 성과 인상률"
                     },
                     "performance": {
                         "rate": performance_rate,
-                        "percentage": round(performance_rate * 100, 2),
+                        "percentage": round(performance_rate * 100, 1),  # 소수점 첫째자리
                         "description": "과거 10년 성과급 추세 기반 예측",
                         "calculation": "선형회귀 분석으로 예측"
                     },
                     "total": {
                         "rate": prediction_value,
-                        "percentage": round(prediction_value * 100, 2),
+                        "percentage": round(prediction_value * 100, 1),  # 소수점 첫째자리
                         "description": "2026년 총 임금 인상률 예측",
-                        "verification": f"{round(base_up_rate * 100, 2)}% + {round(performance_rate * 100, 2)}% = {round(prediction_value * 100, 2)}%"
+                        "verification": f"{round(base_up_rate * 100, 1)}% + {round(performance_rate * 100, 1)}% = {round(prediction_value * 100, 1)}%"
                     }
                 }
             }
@@ -635,8 +663,61 @@ class DashboardService:
         return templates
     
     def get_available_variables(self) -> Dict[str, Any]:
-        """사용 가능한 변수 목록과 정의 반환"""
+        """사용 가능한 변수 목록과 정의 반환 (Feature Importance 기반)"""
         
+        # Feature Importance 기반으로 상위 변수들 가져오기
+        try:
+            from app.services.analysis_service import analysis_service
+            from app.services.modeling_service import modeling_service
+            
+            if modeling_service.current_model:
+                # Feature importance 가져오기
+                importance_result = analysis_service.get_feature_importance(
+                    modeling_service.current_model, 
+                    method="shap", 
+                    top_n=10
+                )
+                
+                if importance_result and importance_result.get("feature_importance"):
+                    # 상위 Feature들을 variables로 매핑
+                    top_features = importance_result["feature_importance"][:10]  # 상위 10개
+                    
+                    variables = []
+                    current_values = {}
+                    
+                    for feature_data in top_features:
+                        feature_name = feature_data["feature"]
+                        
+                        # variable_mapping과 variable_definitions에서 매핑 찾기
+                        if feature_name in self.variable_mapping:
+                            var_name, default_val = self.variable_mapping[feature_name]
+                            if var_name in self.variable_definitions:
+                                definition = self.variable_definitions[var_name]
+                                variables.append({
+                                    "name": var_name,
+                                    "display_name": definition["name"],
+                                    "description": definition["description"],
+                                    "min_value": definition["min_value"],
+                                    "max_value": definition["max_value"],
+                                    "unit": definition["unit"],
+                                    "current_value": definition["current_value"],
+                                    "importance": feature_data.get("importance", 0),
+                                    "feature_korean": feature_data.get("feature_korean", feature_name)
+                                })
+                                current_values[var_name] = definition["current_value"]
+                    
+                    # Feature Importance 순으로 정렬된 변수들이 있으면 반환
+                    if variables:
+                        print(f"📊 Dashboard variables updated with top {len(variables)} features from importance")
+                        return {
+                            "variables": variables,
+                            "current_values": current_values
+                        }
+        
+        except Exception as e:
+            print(f"⚠️ Could not get feature importance for variables: {str(e)}")
+        
+        # Fallback: 기본 변수 정의 사용
         variables = []
         current_values = {}
         
@@ -658,20 +739,84 @@ class DashboardService:
         }
     
     def get_economic_indicators(self) -> Dict[str, Any]:
-        """주요 경제 지표 반환"""
+        """주요 경제 지표 반환 (실제 업로드된 데이터에서 최신 값 사용)"""
         
-        # 실제 데이터나 외부 API에서 가져올 수 있도록 확장 가능
+        try:
+            from app.services.data_service import data_service
+            
+            if data_service.current_data is not None and len(data_service.current_data) > 0:
+                # 최신 연도 데이터 (가장 마지막 행) 사용
+                latest_data = data_service.current_data.iloc[-1]
+                
+                # 데이터에서 경제지표 추출 (비율을 퍼센트로 변환)
+                indicators = {}
+                
+                # GDP 성장률 (0~1 스케일을 퍼센트로 변환, 소수점 첫째자리까지)
+                if 'gdp_growth_kr' in latest_data:
+                    value = float(latest_data['gdp_growth_kr'])
+                    indicators['current_gdp_growth'] = round(value * 100 if value < 1 else value, 1)
+                
+                # 소비자물가상승률 (인플레이션)
+                if 'cpi_kr' in latest_data:
+                    value = float(latest_data['cpi_kr'])
+                    indicators['current_inflation'] = round(value * 100 if value < 1 else value, 1)
+                
+                # 실업률
+                if 'unemployment_rate_kr' in latest_data:
+                    value = float(latest_data['unemployment_rate_kr'])
+                    indicators['current_unemployment'] = round(value * 100 if value < 1 else value, 1)
+                
+                # 최저임금 인상률
+                if 'minimum_wage_increase_kr' in latest_data:
+                    value = float(latest_data['minimum_wage_increase_kr'])
+                    indicators['minimum_wage_increase'] = round(value * 100 if value < 1 else value, 1)
+                
+                # 환율 변화율 (기준값 대비)
+                if 'exchange_rate_change_krw' in latest_data:
+                    value = float(latest_data['exchange_rate_change_krw'])
+                    indicators['exchange_rate_change'] = round(value * 100 if abs(value) < 1 else value, 1)
+                
+                # 미국 경제지표들
+                if 'gdp_growth_usa' in latest_data:
+                    value = float(latest_data['gdp_growth_usa'])
+                    indicators['usa_gdp_growth'] = round(value * 100 if value < 1 else value, 1)
+                
+                if 'cpi_usa' in latest_data:
+                    value = float(latest_data['cpi_usa'])
+                    indicators['usa_inflation'] = round(value * 100 if value < 1 else value, 1)
+                
+                if 'unemployment_rate_us' in latest_data:
+                    value = float(latest_data['unemployment_rate_us'])
+                    indicators['usa_unemployment'] = round(value * 100 if value < 1 else value, 1)
+                
+                # SBL 관련 지표들
+                if 'wage_increase_total_sbl' in latest_data:
+                    value = float(latest_data['wage_increase_total_sbl'])
+                    indicators['current_wage_growth'] = round(value * 100 if value < 1 else value, 1)
+                
+                # 연도 정보 추가
+                year_info = "데이터 기준"
+                if 'eng' in latest_data:
+                    year_info = f"{latest_data['eng']}년 기준"
+                
+                return {
+                    "indicators": indicators,
+                    "last_updated": datetime.now().strftime("%Y-%m-%d"),
+                    "note": f"업로드된 데이터 ({year_info})"
+                }
+                
+        except Exception as e:
+            print(f"Error getting economic indicators from data: {str(e)}")
+        
+        # Fallback: 기본값 반환
         return {
             "indicators": {
-                "current_inflation": 2.5,
-                "current_gdp_growth": 2.8,
-                "current_unemployment": 3.2,
-                "current_wage_growth": 3.5,
-                "last_year_wage_growth": 3.8,
-                "industry_average": 3.2,
-                "public_sector_average": 2.9
+                "current_inflation": 2.3,
+                "current_gdp_growth": 2.4,
+                "current_unemployment": 2.8,
             },
-            "last_updated": datetime.now().strftime("%Y-%m-%d")
+            "last_updated": datetime.now().strftime("%Y-%m-%d"),
+            "note": "기본값 (데이터 로드 실패)"
         }
     
     def perform_scenario_analysis(self, model, scenarios: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

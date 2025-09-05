@@ -69,6 +69,24 @@ async def compare_models(n_select: int = Query(default=3, ge=1, le=10)) -> Dict[
     try:
         result = modeling_service.compare_models_adaptive(n_select=n_select)
         
+        # 모델 비교 완료 후 ExplainerDashboard 캐시 클리어
+        try:
+            from app.services.explainer_dashboard_service import explainer_dashboard_service
+            from app.services.analysis_service import analysis_service
+            
+            # 기존 ExplainerDashboard 중지 (새로운 모델로 재생성 필요)
+            if explainer_dashboard_service.is_running:
+                explainer_dashboard_service.stop_dashboard()
+                print("🔄 Stopped ExplainerDashboard for model comparison update")
+            
+            # Feature importance 캐시 클리어
+            analysis_service._importance_cache.clear()
+            analysis_service._shap_cache.clear()
+            print("🧹 Cleared analysis caches after model comparison")
+            
+        except Exception as dashboard_error:
+            print(f"⚠️ ExplainerDashboard update failed: {dashboard_error}")
+        
         return {
             **result,
             "recommendation": "Use the recommended model for best performance, or choose from the best models list"
@@ -86,6 +104,27 @@ async def train_specific_model(request: ModelTrainingRequest) -> Dict[str, Any]:
     """
     try:
         result = modeling_service.train_specific_model(request.model_name)
+        
+        # 모델 학습 완료 후 ExplainerDashboard 재생성
+        try:
+            from app.services.explainer_dashboard_service import explainer_dashboard_service
+            
+            # 기존 ExplainerDashboard 중지
+            if explainer_dashboard_service.is_running:
+                explainer_dashboard_service.stop_dashboard()
+                print("🔄 Stopped existing ExplainerDashboard for model update")
+            
+            # Feature importance 캐시 클리어 (새로운 모델 반영)
+            from app.services.analysis_service import analysis_service
+            analysis_service._importance_cache.clear()
+            analysis_service._shap_cache.clear()
+            print("🧹 Cleared analysis caches for new model")
+            
+            print("✅ ExplainerDashboard will be recreated on next request with new model data")
+            
+        except Exception as dashboard_error:
+            print(f"⚠️ ExplainerDashboard update failed: {dashboard_error}")
+            # Dashboard 오류가 있어도 모델 학습 결과는 반환
         
         return {
             **result,
