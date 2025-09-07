@@ -681,9 +681,9 @@ export const Effects: React.FC = () => {
             <div className="p-4 border rounded-lg">
               <h3 className="font-semibold mb-2">핵심 인사이트</h3>
               <ul className="space-y-2 text-sm">
-                <li>• SBL은 업계 최저 수준의 인건비율(11%)과 최상위 영업이익률(29%)을 동시에 달성</li>
+                <li>• SBL은 업계 최저 수준의 인건비율(13.6%)과 최상위 영업이익률(32.3%)을 동시에 달성</li>
                 <li>• 경쟁사 대비 우수한 비용 효율성으로 임금 인상 여력 충분</li>
-                <li>• 2026년 예상 인상률 5.88%는 업계 평균을 상회하지만 재무 건전성 유지 가능</li>
+                <li>• 2026년 예상 인상률 5.4%는 업계 평균을 상회하지만 재무 건전성 유지 가능</li>
                 <li>• 인재 확보 경쟁력 강화를 위한 전략적 임금 인상 필요</li>
               </ul>
             </div>
@@ -691,7 +691,7 @@ export const Effects: React.FC = () => {
             <div className="p-4 bg-blue-50 rounded-lg">
               <h3 className="font-semibold mb-2 text-blue-900">권고사항</h3>
               <ul className="space-y-2 text-sm text-blue-800">
-                <li>✓ Base-up 3.5% + 성과급 2.38% 구조로 탄력적 운영</li>
+                <li>✓ Base-up 3.3% + 성과급 2.1% 구조로 탄력적 운영</li>
                 <li>✓ 핵심 인재 대상 차별화된 보상 전략 수립</li>
                 <li>✓ 생산성 향상과 연계한 성과 보상 체계 강화</li>
                 <li>✓ 분기별 시장 동향 모니터링 및 유연한 대응</li>
