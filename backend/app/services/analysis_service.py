@@ -68,15 +68,53 @@ class AnalysisService:
             
         except Exception as e:
             print(f"Warning: Could not get PyCaret data: {str(e)}")
-            # PyCaret 환경이 설정되어 있지 않으면 ExplainerDashboard 생성을 포기
-            raise ValueError("PyCaret environment is required for ExplainerDashboard")
             logging.warning(f"Could not get PyCaret data: {str(e)}")
-            # Fallback to data_service
+            
+            # PyCaret 환경이 없을 때 fallback to data_service
             if data_service.current_data is not None:
-                # 임시로 현재 데이터 사용 (실제 구현에서는 타겟 컬럼 정보 필요)
-                data = data_service.current_data
-                return data, None, None, None
-            return None, None, None, None
+                print("📊 Using fallback data from data_service")
+                # 현재 데이터를 train/test로 분할 (80/20)
+                data = data_service.current_data.copy()
+                
+                # 타겟 컬럼 식별 (임금인상률 관련 컬럼)
+                target_cols = [col for col in data.columns if 'wage_increase' in col.lower() and 'target' in col.lower()]
+                if not target_cols:
+                    target_cols = [col for col in data.columns if col in ['wage_increase_total', 'total_wage_increase']]
+                if not target_cols and 'target' in data.columns:
+                    target_cols = ['target']
+                
+                if target_cols:
+                    target_col = target_cols[0]
+                    print(f"📊 Using target column: {target_col}")
+                    
+                    # 피처와 타겟 분리
+                    feature_cols = [col for col in data.columns if col != target_col]
+                    X = data[feature_cols]
+                    y = data[target_col]
+                    
+                    # train/test 분할 (80/20)
+                    from sklearn.model_selection import train_test_split
+                    X_train, X_test, y_train, y_test = train_test_split(
+                        X, y, test_size=0.2, random_state=42
+                    )
+                    
+                    self.train_data = (X_train, y_train)
+                    self.test_data = (X_test, y_test)
+                    self.feature_names = list(X_train.columns)
+                    
+                    # 한글 컬럼명 매핑 가져오기
+                    self.feature_display_names = data_service.get_display_names(self.feature_names)
+                    
+                    print(f"📊 Fallback data prepared: X_train={X_train.shape}, X_test={X_test.shape}")
+                    return X_train, y_train, X_test, y_test
+                
+                else:
+                    print("⚠️ No target column found in data")
+                    # 최후의 fallback: PyCaret 환경 없이는 분석 불가 에러 발생
+                    raise ValueError("PyCaret environment is required for ExplainerDashboard")
+            else:
+                print("⚠️ No data available in data_service")
+                raise ValueError("PyCaret environment is required for ExplainerDashboard")
     
     def get_shap_analysis(self, model, sample_index: Optional[int] = None, top_n: int = 10) -> Dict[str, Any]:
         """SHAP 분석 수행"""
@@ -222,16 +260,36 @@ class AnalysisService:
                 else:
                     importance_scores = np.abs(shap_values)
                 
-                # SHAP 값들이 0~1 스케일인 경우 퍼센트로 변환 (100배)
-                if np.max(importance_scores) < 0.5:  # 모든 값이 0.5 미만이면 비율로 간주
-                    importance_scores = importance_scores * 100
-                    print(f"📊 Scaled SHAP values to percentage scale")
+                print(f"📊 Raw importance scores: shape={importance_scores.shape}, values={importance_scores[:5]}")
                 
-                print(f"📊 Importance scores: shape={importance_scores.shape}, values={importance_scores[:5]}")
+                # 정규화를 통해 불균형 해결 (0-1 스케일로 정규화)
+                if len(importance_scores) > 0:
+                    # 이상치 제거를 위해 95 percentile로 클리핑
+                    percentile_95 = np.percentile(importance_scores, 95)
+                    importance_scores = np.clip(importance_scores, 0, percentile_95)
+                    
+                    # Min-Max 정규화 (0-1 스케일)
+                    min_val = np.min(importance_scores)
+                    max_val = np.max(importance_scores)
+                    if max_val > min_val:
+                        importance_scores = (importance_scores - min_val) / (max_val - min_val)
+                    
+                    # 퍼센트로 변환 (0-100%)
+                    importance_scores = importance_scores * 100
+                    
+                    print(f"📊 Normalized importance scores: values={importance_scores[:5]}")
+                
+                print(f"📊 Final importance scores: shape={importance_scores.shape}, values={importance_scores[:5]}")
             else:
                 importance_scores = np.abs(shap_values[0]).mean(axis=0) if len(shap_values) > 0 else []
-                # 스케일링 적용
-                if len(importance_scores) > 0 and np.max(importance_scores) < 0.5:
+                # 동일한 정규화 적용
+                if len(importance_scores) > 0:
+                    percentile_95 = np.percentile(importance_scores, 95)
+                    importance_scores = np.clip(importance_scores, 0, percentile_95)
+                    min_val = np.min(importance_scores)
+                    max_val = np.max(importance_scores)
+                    if max_val > min_val:
+                        importance_scores = (importance_scores - min_val) / (max_val - min_val)
                     importance_scores = importance_scores * 100
             
             # 값이 모두 0인지 확인

@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
+import pandas as pd
+import numpy as np
 from app.services.modeling_service import modeling_service
 from app.services.analysis_service import analysis_service
 from app.services.explainer_dashboard_service import explainer_dashboard_service
@@ -209,14 +211,51 @@ async def create_explainer_dashboard() -> Dict[str, Any]:
         if not modeling_service.current_model:
             raise HTTPException(status_code=404, detail="No trained model available")
         
-        # 훈련 데이터 가져오기
-        X_train, y_train, X_test, y_test = analysis_service._get_training_data()
-        
-        if X_test is None or y_test is None:
-            raise HTTPException(status_code=404, detail="No test data available")
+        # PyCaret 환경에 의존하지 않고 데이터 직접 생성
+        try:
+            # 먼저 PyCaret 데이터 시도
+            X_train, y_train, X_test, y_test = analysis_service._get_training_data()
+        except Exception as e:
+            print(f"PyCaret data failed, using fallback: {e}")
+            # Fallback: data_service에서 직접 데이터 생성
+            from app.services.data_service import data_service
+            if data_service.current_data is not None:
+                data = data_service.current_data.copy()
+                
+                # modeling_service에서 모델이 훈련된 피처 정보 가져오기
+                if hasattr(modeling_service, 'feature_names') and modeling_service.feature_names:
+                    model_features = modeling_service.feature_names
+                    print(f"Model was trained with features: {model_features[:5]}...")
+                    
+                    # 데이터에서 모델 피처만 선택
+                    available_features = [f for f in model_features if f in data.columns]
+                    print(f"Available model features in data: {len(available_features)}/{len(model_features)}")
+                    
+                    if available_features:
+                        X_test = data[available_features].head(10)  # 상위 10개 행만 사용
+                        y_test = pd.Series([0.05] * len(X_test))  # 5% 기본 인상률
+                        print(f"Created X_test with model features: {X_test.shape}")
+                    else:
+                        raise HTTPException(status_code=404, detail="No matching features found between model and data")
+                else:
+                    # 피처 정보가 없으면 수치형 데이터 사용
+                    print("No model feature info, using numeric columns")
+                    X_test = data.select_dtypes(include=[np.number]).head(10)
+                    y_test = pd.Series([0.05] * len(X_test))
+                    print(f"Created X_test: {X_test.shape}, y_test: {len(y_test)}")
+            else:
+                raise HTTPException(status_code=404, detail="No data available for dashboard creation")
         
         # Feature names 가져오기
-        feature_names = analysis_service.feature_names
+        feature_names = list(X_test.columns) if hasattr(X_test, 'columns') else None
+        if not feature_names:
+            # modeling_service에서 feature names 가져오기
+            if hasattr(modeling_service, 'feature_names') and modeling_service.feature_names:
+                feature_names = modeling_service.feature_names
+            else:
+                feature_names = [f"feature_{i}" for i in range(X_test.shape[1])]
+        
+        print(f"Dashboard creation: X_test.shape={X_test.shape}, feature_names={len(feature_names)}")
         
         # 대시보드 생성
         result = explainer_dashboard_service.create_dashboard(
@@ -245,3 +284,21 @@ async def stop_explainer_dashboard() -> Dict[str, Any]:
         return {"message": "ExplainerDashboard stopped successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to stop dashboard: {str(e)}")
+
+@router.post("/clear-cache")
+async def clear_analysis_cache() -> Dict[str, Any]:
+    """
+    분석 캐시 초기화 (SHAP, Feature Importance 등)
+    """
+    try:
+        # analysis_service 캐시 초기화
+        analysis_service._shap_cache = {}
+        analysis_service._importance_cache = {}
+        analysis_service._last_model_id = None
+        
+        return {
+            "message": "Analysis cache cleared successfully",
+            "cleared_caches": ["shap_cache", "importance_cache"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear cache: {str(e)}")

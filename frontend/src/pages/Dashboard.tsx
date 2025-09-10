@@ -874,35 +874,8 @@ export const Dashboard: React.FC = () => {
           </Card>
         </div>
 
-        {/* 오른쪽: 트렌드 분석과 영향 요인 분석 (2/3 너비) */}
+        {/* 오른쪽: 영향 요인 분석과 트렌드 분석 (2/3 너비) */}
         <div className="lg:col-span-2 space-y-6">
-          {/* 트렌드 분석 */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <LineChart className="mr-2 h-5 w-5" />
-                트렌드 분석
-              </CardTitle>
-              <CardDescription>
-                과거 임금인상률 추이 및 향후 전망
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {trendData && getChartData() ? (
-                <div className="h-64">
-                  <Line data={getChartData()!} options={getChartOptions()} />
-                </div>
-              ) : (
-                <div className="h-64 bg-background border rounded-md flex items-center justify-center">
-                  <div className="text-center">
-                    <Loader2 className="h-8 w-8 text-muted-foreground mx-auto mb-2 animate-spin" />
-                    <p className="text-muted-foreground">데이터 로딩 중...</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {/* 영향 요인 분석 */}
           <Card>
             <CardHeader>
@@ -940,6 +913,33 @@ export const Dashboard: React.FC = () => {
                   );
                 }
               })()}
+            </CardContent>
+          </Card>
+
+          {/* 트렌드 분석 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <LineChart className="mr-2 h-5 w-5" />
+                트렌드 분석
+              </CardTitle>
+              <CardDescription>
+                과거 임금인상률 추이 및 향후 전망
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {trendData && getChartData() ? (
+                <div className="h-64">
+                  <Line data={getChartData()!} options={getChartOptions()} />
+                </div>
+              ) : (
+                <div className="h-64 bg-background border rounded-md flex items-center justify-center">
+                  <div className="text-center">
+                    <Loader2 className="h-8 w-8 text-muted-foreground mx-auto mb-2 animate-spin" />
+                    <p className="text-muted-foreground">데이터 로딩 중...</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

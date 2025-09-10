@@ -326,7 +326,7 @@ class ModelingService:
     def compare_models_adaptive(self, n_select: int = 3) -> Dict[str, Any]:
         """데이터 크기에 적응적인 모델 비교"""
         
-        if not self.is_setup_complete:
+        if not self.is_setup_complete and self.current_model is None:
             raise RuntimeError("PyCaret environment not setup. Call setup_pycaret_environment first.")
         
         # 현재 데이터 크기 확인
@@ -422,7 +422,7 @@ class ModelingService:
     def train_specific_model(self, model_name: str) -> Dict[str, Any]:
         """특정 모델 학습"""
         
-        if not self.is_setup_complete:
+        if not self.is_setup_complete and self.current_model is None:
             raise RuntimeError("PyCaret environment not setup. Call setup_pycaret_environment first.")
         
         old_stdout = sys.stdout

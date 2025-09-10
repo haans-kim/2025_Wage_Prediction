@@ -50,14 +50,15 @@ class ExplainerDashboardService:
                     model_features = modeling_service.feature_names
                     logger.info(f"Using modeling_service features: {model_features[:5]}...")
                 else:
-                    # PyCaret 모델의 경우 다른 방법 시도
+                    # PyCaret 없이도 작동하도록 fallback
                     try:
                         from pycaret.regression import get_config
                         model_features = list(get_config('X_train').columns)
                         logger.info(f"PyCaret model features: {model_features[:5]}...")
                     except:
+                        # PyCaret 환경이 없을 때는 data_service에서 피처 정보 가져오기
                         model_features = feature_names
-                        logger.warning("Could not determine model features, using provided feature_names")
+                        logger.info(f"Using provided feature_names as fallback: {model_features[:5]}...")
             
             # X_test를 모델이 훈련된 feature만 포함하도록 필터링
             if hasattr(X_test, 'columns'):
@@ -219,8 +220,8 @@ class ExplainerDashboardService:
             X_test_copy.index = years
             y_test.index = years
             
-            # Explainer 생성 (회귀 모델) - Feature Importance 계산 활성화
-            logger.info("Creating RegressionExplainer with enhanced feature importance...")
+            # Explainer 생성 (회귀 모델) - Permutation Importance를 우선 사용
+            logger.info("Creating RegressionExplainer with Permutation Importance...")
             logger.info(f"Model type: {type(wrapped_model)}")
             logger.info(f"X_test_copy shape: {X_test_copy.shape}, columns: {list(X_test_copy.columns)}")
             
@@ -228,12 +229,16 @@ class ExplainerDashboardService:
             y_test_scaled = y_test * 100
             logger.info(f"Scaled y_test values: {y_test_scaled.values[:3] if len(y_test_scaled) > 0 else 'empty'}")
             
-            # 데이터가 적을 때는 SHAP 계산이 어려울 수 있으므로 기본 설정만 사용
+            # ExplainerDashboard 기본 설정으로 생성
             explainer = RegressionExplainer(
                 wrapped_model,  # 래핑된 모델 사용 
                 X_test_copy,  # 복사본 사용
                 y_test_scaled,  # 스케일 조정된 y값 사용
-                units='%'  # 단위 설정
+                units='%',  # 단위 설정
+                # SHAP 계산을 보다 안정적으로 설정
+                shap='kernel',  # KernelExplainer 강제 사용
+                # 계산 성능을 위해 샘플 수 제한
+                n_jobs=1
             )
             
             logger.info("Explainer created successfully")
