@@ -50,15 +50,13 @@ class ExplainerDashboardService:
                     model_features = modeling_service.feature_names
                     logger.info(f"Using modeling_service features: {model_features[:5]}...")
                 else:
-                    # PyCaret 없이도 작동하도록 fallback
+                    # PyCaret 환경 확인 필수
                     try:
                         from pycaret.regression import get_config
                         model_features = list(get_config('X_train').columns)
                         logger.info(f"PyCaret model features: {model_features[:5]}...")
                     except:
-                        # PyCaret 환경이 없을 때는 data_service에서 피처 정보 가져오기
-                        model_features = feature_names
-                        logger.info(f"Using provided feature_names as fallback: {model_features[:5]}...")
+                        raise ValueError("ExplainerDashboard requires PyCaret environment and trained model. Please run model training first.")
             
             # X_test를 모델이 훈련된 feature만 포함하도록 필터링
             if hasattr(X_test, 'columns'):

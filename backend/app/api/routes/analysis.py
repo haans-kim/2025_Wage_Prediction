@@ -211,40 +211,55 @@ async def create_explainer_dashboard() -> Dict[str, Any]:
         if not modeling_service.current_model:
             raise HTTPException(status_code=404, detail="No trained model available")
         
-        # PyCaret 환경에 의존하지 않고 데이터 직접 생성
+        # PyCaret 글로벌 환경 변수 직접 사용
         try:
-            # 먼저 PyCaret 데이터 시도
-            X_train, y_train, X_test, y_test = analysis_service._get_training_data()
+            print("🔍 Trying to access PyCaret global environment...")
+            from pycaret.regression import get_config
+            
+            # PyCaret 글로벌 환경에서 직접 데이터 가져오기
+            X_train = get_config('X_train')
+            y_train = get_config('y_train') 
+            X_test = get_config('X_test')
+            y_test = get_config('y_test')
+            
+            print(f"✅ Successfully got PyCaret data: X_train={X_train.shape}, X_test={X_test.shape}")
+            
         except Exception as e:
-            print(f"PyCaret data failed, using fallback: {e}")
-            # Fallback: data_service에서 직접 데이터 생성
-            from app.services.data_service import data_service
-            if data_service.current_data is not None:
-                data = data_service.current_data.copy()
+            print(f"⚠️ PyCaret global environment access failed: {e}")
+            # Fallback: analysis_service를 통한 데이터 시도
+            try:
+                X_train, y_train, X_test, y_test = analysis_service._get_training_data()
+                print(f"✅ Got data from analysis_service: X_test={X_test.shape}")
+            except Exception as e2:
+                print(f"⚠️ Analysis service also failed: {e2}")
+                # 최종 Fallback: data_service에서 직접 데이터 생성
+                from app.services.data_service import data_service
+                if data_service.current_data is not None:
+                    data = data_service.current_data.copy()
                 
-                # modeling_service에서 모델이 훈련된 피처 정보 가져오기
-                if hasattr(modeling_service, 'feature_names') and modeling_service.feature_names:
-                    model_features = modeling_service.feature_names
-                    print(f"Model was trained with features: {model_features[:5]}...")
-                    
-                    # 데이터에서 모델 피처만 선택
-                    available_features = [f for f in model_features if f in data.columns]
-                    print(f"Available model features in data: {len(available_features)}/{len(model_features)}")
-                    
-                    if available_features:
-                        X_test = data[available_features].head(10)  # 상위 10개 행만 사용
-                        y_test = pd.Series([0.05] * len(X_test))  # 5% 기본 인상률
-                        print(f"Created X_test with model features: {X_test.shape}")
+                    # modeling_service에서 모델이 훈련된 피처 정보 가져오기
+                    if hasattr(modeling_service, 'feature_names') and modeling_service.feature_names:
+                        model_features = modeling_service.feature_names
+                        print(f"Model was trained with features: {model_features[:5]}...")
+                        
+                        # 데이터에서 모델 피처만 선택
+                        available_features = [f for f in model_features if f in data.columns]
+                        print(f"Available model features in data: {len(available_features)}/{len(model_features)}")
+                        
+                        if available_features:
+                            X_test = data[available_features].head(10)  # 상위 10개 행만 사용
+                            y_test = pd.Series([0.05] * len(X_test))  # 5% 기본 인상률
+                            print(f"Created X_test with model features: {X_test.shape}")
+                        else:
+                            raise HTTPException(status_code=404, detail="No matching features found between model and data")
                     else:
-                        raise HTTPException(status_code=404, detail="No matching features found between model and data")
+                        # 피처 정보가 없으면 수치형 데이터 사용
+                        print("No model feature info, using numeric columns")
+                        X_test = data.select_dtypes(include=[np.number]).head(10)
+                        y_test = pd.Series([0.05] * len(X_test))
+                        print(f"Created X_test: {X_test.shape}, y_test: {len(y_test)}")
                 else:
-                    # 피처 정보가 없으면 수치형 데이터 사용
-                    print("No model feature info, using numeric columns")
-                    X_test = data.select_dtypes(include=[np.number]).head(10)
-                    y_test = pd.Series([0.05] * len(X_test))
-                    print(f"Created X_test: {X_test.shape}, y_test: {len(y_test)}")
-            else:
-                raise HTTPException(status_code=404, detail="No data available for dashboard creation")
+                    raise HTTPException(status_code=404, detail="No data available for dashboard creation")
         
         # Feature names 가져오기
         feature_names = list(X_test.columns) if hasattr(X_test, 'columns') else None
@@ -284,6 +299,31 @@ async def stop_explainer_dashboard() -> Dict[str, Any]:
         return {"message": "ExplainerDashboard stopped successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to stop dashboard: {str(e)}")
+
+@router.get("/contribution-plot")
+async def get_contribution_plot(
+    sample_index: Optional[int] = Query(None),
+    top_n_features: int = Query(10, ge=1, le=20)
+) -> Dict[str, Any]:
+    """
+    개별 예측에 대한 Feature Contribution 플롯 데이터
+    """
+    try:
+        if not modeling_service.current_model:
+            raise HTTPException(status_code=404, detail="No trained model available")
+        
+        result = analysis_service.get_contribution_plot(
+            model=modeling_service.current_model,
+            sample_index=sample_index,
+            top_n=top_n_features
+        )
+        
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Contribution plot analysis failed: {str(e)}")
 
 @router.post("/clear-cache")
 async def clear_analysis_cache() -> Dict[str, Any]:

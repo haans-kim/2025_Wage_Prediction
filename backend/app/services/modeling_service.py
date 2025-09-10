@@ -394,16 +394,9 @@ class ModelingService:
             self.compared_models = best_models  # 비교된 모델들만 저장
             
         except Exception as e:
-            # 실패 시 기본 GBR 사용 (더 나은 성능을 위해)
-            warnings.warn(f"Model comparison failed: {str(e)}. Using default Gradient Boosting Regressor.")
-            
-            gbr_model = create_model('gbr', verbose=False, random_state=42)
-            self.model_results = {
-                'best_models': [gbr_model],
-                'comparison_df': None,
-                'recommended_model': gbr_model,
-                'fallback_used': True
-            }
+            # Model comparison failed - cannot proceed without proper model selection
+            logging.error(f"Model comparison failed: {str(e)}")
+            raise ValueError(f"Model training failed. Cannot proceed without successful model comparison and selection: {str(e)}")
             
         finally:
             # 출력 복원
@@ -562,37 +555,26 @@ class ModelingService:
         }
     
     def _save_model(self, model_name: str = None) -> bool:
-        """모델을 파일로 저장"""
+        """최신 모델만 저장 (버전별 파일 생성 안함)"""
         try:
             if self.current_model is None:
                 return False
             
             # 저장 경로 설정
             import os
-            from datetime import datetime
             
             # models 디렉토리 생성
             models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'models')
             os.makedirs(models_dir, exist_ok=True)
             
-            # 파일명 생성 (모델명_날짜시간.pkl)
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            if model_name:
-                filename = f"wage_model_{model_name}_{timestamp}"
-            else:
-                filename = f"wage_model_{timestamp}"
-            
-            filepath = os.path.join(models_dir, filename)
+            # 최신 모델만 저장 (latest.pkl)
+            latest_path = os.path.join(models_dir, 'latest')
             
             # PyCaret의 save_model 사용
             from pycaret.regression import save_model
-            save_model(self.current_model, filepath, verbose=False)
-            
-            # 최신 모델 링크 생성 (latest.pkl)
-            latest_path = os.path.join(models_dir, 'latest')
             save_model(self.current_model, latest_path, verbose=False)
             
-            print(f"✅ Model saved successfully: {filename}.pkl")
+            print(f"✅ Model saved successfully as latest.pkl")
             return True
             
         except Exception as e:

@@ -186,31 +186,10 @@ class DashboardService:
                         feature_columns = list(X_train.columns)
                         print(f"✅ Using feature names from PyCaret config: {len(feature_columns)} features")
                     else:
-                        # 기본 feature 리스트 (실제 데이터 기반)
-                        feature_columns = [
-                            'gdp_growth_kr', 'cpi_kr', 'unemployment_rate_kr', 'minimum_wage_increase_kr',
-                            'gdp_growth_usa', 'cpi_usa', 'esi_usa', 'unemployment_rate_us', 'eci_usa', 'exchange_rate_change_krw',
-                            'revenue_growth_sbl', 'op_profit_growth_sbl', 'labor_cost_rate_sbl',
-                            'labor_cost_ratio_change_sbl', 'labor_cost_per_employee_sbl', 'labor_to_revenue_sbl',
-                            'revenue_per_employee_sbl', 'op_profit_per_employee_sbl', 'hcroi_sbl', 'hcva_sbl',
-                            'wage_increase_ce', 'revenue_growth_ce', 'op_profit_growth_ce', 'hcroi_ce', 'hcva_ce',
-                            'market_size_growth_rate', 'compensation_competitiveness', 'wage_increase_bu_group',
-                            'wage_increase_mi_group', 'wage_increase_total_group', 'public_sector_wage_increase'
-                        ]
-                        print(f"⚠️ Using default feature list: {len(feature_columns)} features")
+                        raise ValueError("No training data available in PyCaret config. Please run model training first.")
             except Exception as e:
                 print(f"Warning: Could not get PyCaret config: {e}")
-                # 기본 feature 리스트 사용
-                feature_columns = [
-                    'gdp_growth_kr', 'cpi_kr', 'unemployment_rate_kr', 'minimum_wage_increase_kr',
-                    'gdp_growth_usa', 'cpi_usa', 'esi_usa', 'unemployment_rate_us', 'eci_usa', 'exchange_rate_change_krw',
-                    'revenue_growth_sbl', 'op_profit_growth_sbl', 'labor_cost_rate_sbl',
-                    'labor_cost_ratio_change_sbl', 'labor_cost_per_employee_sbl', 'labor_to_revenue_sbl',
-                    'revenue_per_employee_sbl', 'op_profit_per_employee_sbl', 'hcroi_sbl', 'hcva_sbl',
-                    'wage_increase_ce', 'revenue_growth_ce', 'op_profit_growth_ce', 'hcroi_ce', 'hcva_ce',
-                    'market_size_growth_rate', 'compensation_competitiveness', 'wage_increase_bu_group',
-                    'wage_increase_mi_group', 'wage_increase_total_group', 'public_sector_wage_increase'
-                ]
+                raise ValueError("Dashboard requires a trained PyCaret model with proper configuration. Please run model training first.")
             
             # 변수 매핑: Dashboard 변수 → 실제 데이터 컬럼
             # 영향요인 분석 결과 기반으로 가장 중요한 변수들 매핑
@@ -303,42 +282,8 @@ class DashboardService:
             logging.error(f"Error preparing model input: {str(e)}")
             print(f"❌ Error details: {e}")
             
-            # 폴백: 31개 feature로 기본 DataFrame 생성 (누락된 feature 추가)
-            default_features = [
-                'gdp_growth_kr', 'cpi_kr', 'unemployment_rate_kr', 'minimum_wage_increase_kr',
-                'gdp_growth_usa', 'cpi_usa', 'esi_usa', 'unemployment_rate_us', 'eci_usa', 'exchange_rate_change_krw',
-                'revenue_growth_sbl', 'op_profit_growth_sbl', 'labor_cost_rate_sbl',
-                'labor_cost_ratio_change_sbl', 'labor_cost_per_employee_sbl', 'labor_to_revenue_sbl',
-                'revenue_per_employee_sbl', 'op_profit_per_employee_sbl', 'hcroi_sbl', 'hcva_sbl',
-                'wage_increase_ce', 'revenue_growth_ce', 'op_profit_growth_ce', 'hcroi_ce', 'hcva_ce',
-                'market_size_growth_rate', 'compensation_competitiveness', 'wage_increase_bu_group',
-                'wage_increase_mi_group', 'wage_increase_total_group', 'public_sector_wage_increase'
-            ]
-            
-            default_data = {}
-            for col in default_features:
-                if col == 'wage_increase_bu_group':
-                    default_data[col] = variables.get('wage_increase_bu_group', 3.0) * 0.01
-                elif col == 'gdp_growth_kr':
-                    default_data[col] = variables.get('gdp_growth', 2.8) * 0.01
-                elif col == 'unemployment_rate_kr':
-                    default_data[col] = variables.get('unemployment_rate', 3.2) * 0.01
-                elif col == 'market_size_growth_rate':
-                    default_data[col] = variables.get('market_size_growth_rate', 5.0) * 0.01
-                elif col == 'hcroi_sbl':
-                    default_data[col] = variables.get('hcroi_sbl', 1.5)  # 비율이므로 그대로
-                elif col == 'cpi_kr':
-                    default_data[col] = 0.025  # 기본 인플레이션 2.5%
-                elif col == 'minimum_wage_increase_kr':
-                    default_data[col] = 0.025  # 기본 최저임금인상률 2.5%
-                elif col == 'unemployment_rate_us':
-                    default_data[col] = 0.035  # 기본 미국 실업률 3.5%
-                elif col == 'eci_usa':
-                    default_data[col] = 0.03   # 기본 미국 임금비용지수 3.0%
-                else:
-                    default_data[col] = 0.02  # 기본값
-            
-            return pd.DataFrame([default_data])
+            # Cannot prepare model input without proper data
+            raise ValueError(f"Cannot prepare model input data from provided variables: {str(e)}")
     
     def _predict_performance_trend(self) -> float:
         """과거 성과 인상률 데이터를 기반으로 2026년 성과 인상률 예측

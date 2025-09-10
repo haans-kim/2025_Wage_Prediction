@@ -70,51 +70,8 @@ class AnalysisService:
             print(f"Warning: Could not get PyCaret data: {str(e)}")
             logging.warning(f"Could not get PyCaret data: {str(e)}")
             
-            # PyCaret 환경이 없을 때 fallback to data_service
-            if data_service.current_data is not None:
-                print("📊 Using fallback data from data_service")
-                # 현재 데이터를 train/test로 분할 (80/20)
-                data = data_service.current_data.copy()
-                
-                # 타겟 컬럼 식별 (임금인상률 관련 컬럼)
-                target_cols = [col for col in data.columns if 'wage_increase' in col.lower() and 'target' in col.lower()]
-                if not target_cols:
-                    target_cols = [col for col in data.columns if col in ['wage_increase_total', 'total_wage_increase']]
-                if not target_cols and 'target' in data.columns:
-                    target_cols = ['target']
-                
-                if target_cols:
-                    target_col = target_cols[0]
-                    print(f"📊 Using target column: {target_col}")
-                    
-                    # 피처와 타겟 분리
-                    feature_cols = [col for col in data.columns if col != target_col]
-                    X = data[feature_cols]
-                    y = data[target_col]
-                    
-                    # train/test 분할 (80/20)
-                    from sklearn.model_selection import train_test_split
-                    X_train, X_test, y_train, y_test = train_test_split(
-                        X, y, test_size=0.2, random_state=42
-                    )
-                    
-                    self.train_data = (X_train, y_train)
-                    self.test_data = (X_test, y_test)
-                    self.feature_names = list(X_train.columns)
-                    
-                    # 한글 컬럼명 매핑 가져오기
-                    self.feature_display_names = data_service.get_display_names(self.feature_names)
-                    
-                    print(f"📊 Fallback data prepared: X_train={X_train.shape}, X_test={X_test.shape}")
-                    return X_train, y_train, X_test, y_test
-                
-                else:
-                    print("⚠️ No target column found in data")
-                    # 최후의 fallback: PyCaret 환경 없이는 분석 불가 에러 발생
-                    raise ValueError("PyCaret environment is required for ExplainerDashboard")
-            else:
-                print("⚠️ No data available in data_service")
-                raise ValueError("PyCaret environment is required for ExplainerDashboard")
+            # PyCaret 환경이 필수임
+            raise ValueError("PyCaret environment is required for analysis. Please run model training first.")
     
     def get_shap_analysis(self, model, sample_index: Optional[int] = None, top_n: int = 10) -> Dict[str, Any]:
         """SHAP 분석 수행"""
@@ -219,12 +176,7 @@ class AnalysisService:
                                 return predictions
                         except Exception as e:
                             print(f"⚠️ SHAP safe_predict failed: {e}")
-                            # 실제 예측값의 평균으로 fallback
-                            try:
-                                avg_pred = y_train.mean() if y_train is not None else 0.042
-                                return np.full(len(X) if hasattr(X, '__len__') else 1, avg_pred)
-                            except:
-                                return np.full(len(X) if hasattr(X, '__len__') else 1, 0.042)
+                            raise ValueError(f"Model prediction failed for SHAP analysis: {str(e)}")
                     
                     n_background = min(20, len(X_train_array))  # 줄임
                     np.random.seed(42)
@@ -241,17 +193,7 @@ class AnalysisService:
                     
                 except Exception as inner_e:
                     print(f"⚠️ KernelExplainer also failed: {inner_e}")
-                    # 마지막 fallback: 기본 feature importance 사용
-                    if hasattr(model, 'feature_importances_'):
-                        importance_scores = model.feature_importances_
-                        shap_values = np.array([importance_scores] * min(5, len(analysis_data)))
-                    else:
-                        # 모든 기능이 실패한 경우 더미 값 반환 (0이 아닌 작은 값)
-                        num_features = len(self.feature_names) if self.feature_names else analysis_data.shape[1]
-                        # 평균 0.01, 표준편차 0.005의 정규분포로 생성
-                        np.random.seed(42)
-                        shap_values = np.random.normal(0.01, 0.005, (min(5, len(analysis_data)), num_features))
-                        print(f"⚠️ Using fallback SHAP values with shape: {shap_values.shape}")
+                    raise ValueError(f"All SHAP explainer methods failed. Model incompatible with SHAP analysis: {str(inner_e)}")
             
             # Feature importance 계산
             if isinstance(shap_values, np.ndarray):
@@ -294,10 +236,7 @@ class AnalysisService:
             
             # 값이 모두 0인지 확인
             if np.all(importance_scores == 0):
-                print("⚠️ All importance scores are zero, generating fallback values")
-                # 랜덤하게 중요도 생성 (실제 분석이 실패한 경우)
-                np.random.seed(42)
-                importance_scores = np.random.exponential(0.01, len(self.feature_names))
+                raise ValueError("Feature importance analysis failed - all scores are zero. Cannot provide meaningful analysis.")
             
             # Top N features
             feature_importance = []
@@ -645,9 +584,8 @@ class AnalysisService:
                         return self.model.predict(X)
                     except Exception as e:
                         print(f"⚠️ WrappedModel prediction error: {e}")
-                        # fallback
-                        n_samples = len(X) if hasattr(X, '__len__') else 1
-                        return np.full(n_samples, 0.042)  # 평균값으로 대체
+                        # Can't predict for LIME analysis
+                        raise ValueError(f"WrappedModel prediction failed: {e}")
             
             wrapped_model = WrappedModel(model, feature_names)
             
@@ -726,9 +664,8 @@ class AnalysisService:
                     
                 except Exception as e:
                     print(f"⚠️ LIME prediction error: {e}")
-                    # 안전한 fallback
-                    n_samples = X.shape[0] if hasattr(X, 'shape') and len(X.shape) > 1 else 1
-                    return np.full(n_samples, 0.042)
+                    # LIME prediction failed
+                    raise ValueError(f"LIME prediction function failed: {e}")
             
             # LIME explainer의 설명 생성 시도
             try:
@@ -768,22 +705,7 @@ class AnalysisService:
                     
                 except Exception as retry_error:
                     print(f"⚠️ LIME retry also failed: {retry_error}")
-                    
-                    # 최종 fallback: 가짜 explanation 생성
-                    class MockExplanation:
-                        def __init__(self, feature_names, instance):
-                            self.feature_names = feature_names[:num_features]
-                            self.instance = instance
-                            self.intercept = [0.0, 0.042]
-                        
-                        def as_list(self):
-                            # 랜덤한 importance 값으로 가짜 설명 생성
-                            np.random.seed(42)
-                            values = np.random.normal(0, 0.01, len(self.feature_names))
-                            return [(name, val) for name, val in zip(self.feature_names, values)]
-                    
-                    explanation = MockExplanation(feature_names, instance)
-                    print(f"📊 Using mock LIME explanation as fallback")
+                    raise ValueError(f"All LIME methods failed. Cannot generate explanation: {str(retry_error)}")
             
             # 설명 결과 파싱 (한글명 포함)
             lime_values = []
@@ -801,7 +723,7 @@ class AnalysisService:
                 prediction = float(wrapped_model.predict(instance_df)[0])
             except Exception as e:
                 print(f"⚠️ Final prediction failed: {e}")
-                prediction = 0.042  # fallback
+                raise ValueError(f"Model prediction failed for LIME analysis: {str(e)}")
             
             return {
                 "message": "LIME analysis completed successfully",
@@ -1001,6 +923,209 @@ class AnalysisService:
             logging.error(f"Prediction intervals calculation failed: {str(e)}")
             return {
                 "error": f"Prediction intervals calculation failed: {str(e)}"
+            }
+    
+    def get_contribution_plot(self, model, sample_index: Optional[int] = None, top_n: int = 10) -> Dict[str, Any]:
+        """개별 예측에 대한 Feature Contribution 플롯 데이터"""
+        
+        try:
+            # PyCaret 환경이 필요한지 확인
+            try:
+                from pycaret.regression import get_config
+                has_pycaret_env = True
+                print("📊 PyCaret environment available")
+            except:
+                has_pycaret_env = False
+                print("⚠️ PyCaret environment not available, using fallback method")
+            
+            # 모델에서 실제 feature 이름 가져오기
+            feature_names = None
+            try:
+                # PyCaret 모델에서 feature 이름 가져오기
+                if hasattr(model, 'feature_names_in_'):
+                    feature_names = list(model.feature_names_in_)
+                    print(f"✅ Got feature names from model.feature_names_in_: {len(feature_names)} features")
+                elif hasattr(model, 'steps') and len(model.steps) > 0:
+                    # Pipeline인 경우
+                    final_model = model.steps[-1][1]
+                    if hasattr(final_model, 'feature_names_in_'):
+                        feature_names = list(final_model.feature_names_in_)
+                        print(f"✅ Got feature names from pipeline final model: {len(feature_names)} features")
+                
+                if feature_names:
+                    print(f"🔍 Model features: {feature_names[:10]}..." if len(feature_names) > 10 else f"🔍 Model features: {feature_names}")
+                else:
+                    print("⚠️ Could not get feature names from model")
+            except Exception as e:
+                print(f"⚠️ Error getting feature names: {str(e)}")
+                feature_names = None
+            
+            # 실제 훈련 데이터에서 최신 행을 가져와서 예측 데이터로 사용
+            try:
+                # 훈련 데이터 가져오기
+                X_train, _, _, _ = self._get_training_data()
+                if X_train is not None and len(X_train) > 0:
+                    # 가장 최근 데이터 행 사용 (마지막 행)
+                    latest_data = X_train.iloc[-1:].copy()
+                    print(f"📊 Using latest training data row as prediction data")
+                    print(f"📊 Latest data shape: {latest_data.shape}")
+                    print(f"📊 Latest data columns: {list(latest_data.columns)}")
+                    prediction_data = latest_data
+                else:
+                    raise ValueError("No training data available")
+            except Exception as e:
+                print(f"⚠️ Could not get training data: {str(e)}")
+                raise ValueError(f"Cannot get training data for contribution analysis: {str(e)}")
+            
+            # 모델이 기대하는 feature가 있으면 해당 feature만 선택
+            if feature_names:
+                available_features = [f for f in feature_names if f in prediction_data.columns]
+                missing_features = [f for f in feature_names if f not in prediction_data.columns]
+                
+                if len(missing_features) > 0:
+                    print(f"⚠️ Missing features: {missing_features[:5]}..." if len(missing_features) > 5 else f"⚠️ Missing features: {missing_features}")
+                
+                if len(available_features) >= len(feature_names) * 0.5:  # 50% 이상의 feature가 있어야 함
+                    # 사용 가능한 feature만 선택
+                    prediction_data = prediction_data[available_features]
+                    print(f"📊 Using {len(available_features)} out of {len(feature_names)} features from basic prediction data")
+                    
+                    # 누락된 feature가 있으면 에러 발생
+                    if missing_features:
+                        raise ValueError(f"Cannot perform analysis - model expects features not available in prediction data: {missing_features}")
+                    
+                    # feature 순서를 모델이 기대하는 순서로 맞춤
+                    prediction_data = prediction_data[feature_names]
+                else:
+                    raise ValueError(f"Too many missing features. Available: {len(available_features)}/{len(feature_names)}")
+            
+            print(f"📊 Created basic prediction data")
+            
+            print(f"📊 Using prediction data with shape: {prediction_data.shape}")
+            print(f"🔍 Prediction data columns: {list(prediction_data.columns)}")
+            
+            # 모델 예측
+            prediction = model.predict(prediction_data)[0]
+            print(f"🔍 Model prediction: {prediction}")
+            
+            # 기준선 계산 - 훈련 데이터의 실제 평균 사용
+            try:
+                _, y_train, _, _ = self._get_training_data()
+                if y_train is not None:
+                    baseline_prediction = float(y_train.mean())
+                    print(f"📊 Using actual training data mean as baseline: {baseline_prediction}")
+                else:
+                    raise ValueError("No training target data available for baseline calculation")
+            except Exception as e:
+                raise ValueError(f"Cannot calculate baseline prediction from training data: {str(e)}")
+            
+            # Linear 모델인 경우 계수 기반 기여도 계산
+            if hasattr(model, 'steps') and len(model.steps) > 0:
+                # Pipeline의 마지막 단계가 실제 모델
+                actual_model = model.steps[-1][1]
+                print(f"📊 Using model from pipeline: {type(actual_model).__name__}")
+            else:
+                actual_model = model
+                print(f"📊 Using direct model: {type(actual_model).__name__}")
+            
+            contributions = []
+            
+            if hasattr(actual_model, 'coef_'):
+                # Linear 모델의 계수 기반 기여도
+                coefficients = actual_model.coef_
+                sample_values = prediction_data.iloc[0].values
+                
+                print(f"📊 Model coefficients shape: {coefficients.shape}")
+                print(f"📊 Sample values shape: {sample_values.shape}")
+                
+                for i, (coef, value) in enumerate(zip(coefficients, sample_values)):
+                    if i < len(prediction_data.columns):
+                        feature_name = prediction_data.columns[i]
+                        contribution = coef * (value - 0)  # contribution = coefficient * (value - baseline)
+                        
+                        # 한국어 이름 가져오기
+                        korean_name = self.feature_display_names.get(feature_name, feature_name)
+                        
+                        contributions.append({
+                            "feature": feature_name,
+                            "feature_korean": korean_name,
+                            "feature_value": float(value),
+                            "contribution": float(contribution),
+                            "contribution_abs": float(abs(contribution))
+                        })
+                
+                # 기여도 크기순으로 정렬하고 상위 N개 선택
+                contributions.sort(key=lambda x: x["contribution_abs"], reverse=True)
+                contributions = contributions[:top_n]
+                
+                # 총 기여도 계산
+                total_contribution = sum(c["contribution"] for c in contributions)
+                
+                return {
+                    "message": "Feature contribution analysis completed successfully",
+                    "sample_index": 0,  # 2026년 예측 데이터
+                    "prediction": float(prediction),
+                    "actual_value": float(baseline_prediction),  # 기준값 사용
+                    "baseline_prediction": float(baseline_prediction),
+                    "total_contribution": float(total_contribution),
+                    "residual": float(prediction - baseline_prediction),
+                    "contributions": contributions,
+                    "n_features": len(contributions)
+                }
+            
+            else:
+                # Tree 기반 모델이나 다른 모델의 경우 permutation 기반 방법 사용
+                print("📊 Using permutation-based contribution analysis")
+                
+                # 각 feature를 평균값으로 대체해가며 예측 변화 측정
+                baseline_values = prediction_data.mean()
+                
+                for i, feature_name in enumerate(prediction_data.columns):
+                    if i >= top_n:
+                        break
+                        
+                    # feature를 평균값으로 대체한 데이터
+                    modified_data = prediction_data.copy()
+                    modified_data.iloc[0, i] = baseline_values.iloc[i]
+                    
+                    # 예측값 변화 계산
+                    modified_prediction = model.predict(modified_data)[0]
+                    contribution = prediction - modified_prediction
+                    
+                    # 한국어 이름 가져오기
+                    korean_name = self.feature_display_names.get(feature_name, feature_name)
+                    
+                    contributions.append({
+                        "feature": feature_name,
+                        "feature_korean": korean_name,
+                        "feature_value": float(prediction_data.iloc[0, i]),
+                        "contribution": float(contribution),
+                        "contribution_abs": float(abs(contribution))
+                    })
+                
+                # 기여도 크기순으로 정렬
+                contributions.sort(key=lambda x: x["contribution_abs"], reverse=True)
+                
+                # 총 기여도 계산
+                total_contribution = sum(c["contribution"] for c in contributions)
+                
+                return {
+                    "message": "Feature contribution analysis completed successfully (permutation method)",
+                    "sample_index": 0,  # 2026년 예측 데이터
+                    "prediction": float(prediction),
+                    "actual_value": float(baseline_prediction),  # 기준값 사용
+                    "baseline_prediction": float(baseline_prediction),
+                    "total_contribution": float(total_contribution),
+                    "residual": float(prediction - baseline_prediction),
+                    "contributions": contributions,
+                    "n_features": len(contributions)
+                }
+        
+        except Exception as e:
+            print(f"❌ Contribution plot analysis failed: {str(e)}")
+            return {
+                "error": f"Contribution analysis failed: {str(e)}",
+                "available": False
             }
 
 # 싱글톤 인스턴스

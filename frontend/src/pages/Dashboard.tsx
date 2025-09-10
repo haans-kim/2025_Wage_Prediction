@@ -16,6 +16,7 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
+import ContributionPlot from '../components/ContributionPlot';
 import { 
   TrendingUp, 
   BarChart3, 
@@ -874,8 +875,28 @@ export const Dashboard: React.FC = () => {
           </Card>
         </div>
 
-        {/* 오른쪽: 영향 요인 분석과 트렌드 분석 (2/3 너비) */}
+        {/* 오른쪽: 기여도 분석, 영향 요인 분석, 트렌드 분석 (2/3 너비) */}
         <div className="lg:col-span-2 space-y-6">
+          {/* 기여도 분석 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Target className="mr-2 h-5 w-5" />
+                기여도 분석
+              </CardTitle>
+              <CardDescription>
+                2026년도 5.4% 예측에 대한 각 요인의 개별 기여도
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ContributionPlot 
+                sampleIndex={0}
+                topN={10}
+                height={600}
+              />
+            </CardContent>
+          </Card>
+
           {/* 영향 요인 분석 */}
           <Card>
             <CardHeader>
