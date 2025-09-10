@@ -108,10 +108,29 @@ class AnalysisService:
                 if X_train is None:
                     raise ValueError("No training data available")
                 
-                # 데이터프레임을 numpy로 변협하여 속성 충돌 방지
+                # 데이터프레임을 numpy로 변환하고 모델의 feature names와 맞춤
                 if hasattr(X_train, 'values'):
-                    X_train_array = X_train.values
-                    self.feature_names = X_train.columns.tolist()
+                    # 모델이 훈련된 feature names 가져오기
+                    if hasattr(model, 'feature_names_in_'):
+                        model_features = list(model.feature_names_in_)
+                        print(f"📊 Model expects {len(model_features)} features: {model_features[:5]}...")
+                        
+                        # 모델이 기대하는 feature만 선택
+                        available_features = [f for f in model_features if f in X_train.columns]
+                        if len(available_features) == len(model_features):
+                            X_train_filtered = X_train[model_features]
+                            X_train_array = X_train_filtered.values
+                            self.feature_names = model_features
+                            print(f"✅ Using {len(self.feature_names)} features matching model")
+                        else:
+                            print(f"⚠️ Feature mismatch: available {len(available_features)}, needed {len(model_features)}")
+                            # 기존 방식 사용
+                            X_train_array = X_train.values
+                            self.feature_names = X_train.columns.tolist()
+                    else:
+                        X_train_array = X_train.values
+                        self.feature_names = X_train.columns.tolist()
+                    
                     # 한글 컬럼명 매핑 가져오기
                     self.feature_display_names = data_service.get_display_names(self.feature_names)
                 else:
@@ -126,9 +145,30 @@ class AnalysisService:
             # SHAP explainer 생성 (안전한 방식으로 수정)
             model_name = type(model).__name__.lower()
             
-            # 데이터 준비 (numpy 배열 사용)
+            # 데이터 준비 (모델이 기대하는 features와 일치하도록)
             if X_test is not None:
-                analysis_data = X_test.values if hasattr(X_test, 'values') else X_test
+                if hasattr(model, 'feature_names_in_') and self.feature_names:
+                    # X_test도 동일한 feature filtering 적용
+                    if hasattr(X_test, 'columns'):
+                        # DataFrame인 경우
+                        available_test_features = [f for f in self.feature_names if f in X_test.columns]
+                        if len(available_test_features) == len(self.feature_names):
+                            X_test_filtered = X_test[self.feature_names]
+                            analysis_data = X_test_filtered.values
+                            print(f"✅ X_test filtered to {len(self.feature_names)} features for SHAP")
+                        else:
+                            print(f"⚠️ X_test missing some required features, using filtered X_train")
+                            analysis_data = X_train_array[:100]
+                    else:
+                        # numpy array인 경우, feature 순서가 맞다고 가정
+                        if X_test.shape[1] == len(self.feature_names):
+                            analysis_data = X_test.copy()
+                            print(f"✅ X_test numpy array matches model features ({X_test.shape[1]})")
+                        else:
+                            print(f"⚠️ X_test feature count mismatch ({X_test.shape[1]} vs {len(self.feature_names)}), using X_train")
+                            analysis_data = X_train_array[:100]
+                else:
+                    analysis_data = X_test.values if hasattr(X_test, 'values') else X_test
             else:
                 analysis_data = X_train_array[:100]
             
@@ -162,16 +202,19 @@ class AnalysisService:
                     # 모델 예측 함수를 안전하게 래핑 (PyCaret용)
                     def safe_predict(X):
                         try:
-                            # numpy 배열을 DataFrame으로 변환 (PyCaret 모델용)
+                            # numpy 배열을 DataFrame으로 변환 (정확한 feature names 사용)
                             if hasattr(X, 'shape') and len(X.shape) == 2:
-                                X_df = pd.DataFrame(X, columns=self.feature_names)
+                                # 모델이 훈련된 정확한 feature names 사용
+                                correct_feature_names = self.feature_names if self.feature_names else [f"feature_{i}" for i in range(X.shape[1])]
+                                X_df = pd.DataFrame(X, columns=correct_feature_names)
                                 predictions = model.predict(X_df)
-                                print(f"✅ SHAP predictions: shape={predictions.shape}, sample values={predictions[:3]}")
+                                print(f"✅ SHAP predictions: shape={predictions.shape}, sample values={predictions[:3] if len(predictions) > 3 else predictions}")
                                 return predictions
                             else:
                                 # 1차원 배열인 경우
                                 X_reshaped = X.reshape(1, -1) if len(X.shape) == 1 else X
-                                X_df = pd.DataFrame(X_reshaped, columns=self.feature_names)
+                                correct_feature_names = self.feature_names if self.feature_names else [f"feature_{i}" for i in range(X_reshaped.shape[1])]
+                                X_df = pd.DataFrame(X_reshaped, columns=correct_feature_names)
                                 predictions = model.predict(X_df)
                                 return predictions
                         except Exception as e:
@@ -960,46 +1003,59 @@ class AnalysisService:
                 print(f"⚠️ Error getting feature names: {str(e)}")
                 feature_names = None
             
-            # 실제 훈련 데이터에서 최신 행을 가져와서 예측 데이터로 사용
+            # 2026년 예측을 위한 데이터 가져오기 - data_service의 마스터 데이터 사용
             try:
-                # 훈련 데이터 가져오기
-                X_train, _, _, _ = self._get_training_data()
-                if X_train is not None and len(X_train) > 0:
-                    # 가장 최근 데이터 행 사용 (마지막 행)
-                    latest_data = X_train.iloc[-1:].copy()
-                    print(f"📊 Using latest training data row as prediction data")
-                    print(f"📊 Latest data shape: {latest_data.shape}")
-                    print(f"📊 Latest data columns: {list(latest_data.columns)}")
-                    prediction_data = latest_data
+                from app.services.data_service import data_service
+                
+                # data_service에서 2025년 데이터 가져오기 (2026년 예측용)
+                master_data = data_service.master_data
+                if master_data is not None and len(master_data) > 0:
+                    print("📊 Using 2025 data from data_service for 2026 contribution analysis")
+                    
+                    # 2025년 데이터 (마지막 행) 사용 - 2026년 예측을 위함
+                    prediction_data = master_data.iloc[[-1]].copy()  # 마지막 행 사용
+                    
+                    # 데이터 누수 방지: 임금 관련 컬럼 모두 제거
+                    wage_columns_to_remove = [
+                        'wage_increase_total_sbl', 'wage_increase_mi_sbl', 'wage_increase_bu_sbl',
+                        'wage_increase_baseup_sbl', 'Base-up 인상률', '성과인상률', '임금인상률',
+                        'wage_increase_total_group', 'wage_increase_mi_group', 'wage_increase_bu_group'
+                    ]
+                    prediction_data = prediction_data.drop(columns=wage_columns_to_remove, errors='ignore')
+                    
+                    # year 컬럼도 제거 (모델링에서 사용하지 않음)
+                    if 'eng' in prediction_data.columns:
+                        prediction_data = prediction_data.drop(columns=['eng'])
+                    
+                    # 모델이 훈련된 정확한 feature names 사용
+                    if feature_names and len(feature_names) > 0:
+                        # 모델이 기대하는 feature만 사용 (순서도 정확히)
+                        available_features = [f for f in feature_names if f in prediction_data.columns]
+                        if len(available_features) == len(feature_names):
+                            prediction_data = prediction_data[feature_names]
+                            print(f"📊 Using model's exact features for 2026 prediction: {len(feature_names)} features")
+                        else:
+                            print(f"⚠️ Missing some model features, available: {len(available_features)}/{len(feature_names)}")
+                            print(f"⚠️ Missing features: {set(feature_names) - set(available_features)}")
+                    
+                    print(f"📊 2026 Prediction data shape: {prediction_data.shape}")
+                    print(f"🔍 2026 Prediction data columns: {list(prediction_data.columns)}")
                 else:
-                    raise ValueError("No training data available")
+                    # Fallback: PyCaret 훈련 데이터 사용
+                    print("⚠️ No master data from data_service, trying PyCaret training data")
+                    X_train, _, _, _ = self._get_training_data()
+                    if X_train is not None and len(X_train) > 0:
+                        if feature_names and len(feature_names) > 0:
+                            prediction_data = X_train[feature_names].iloc[-1:].copy()
+                        else:
+                            prediction_data = X_train.iloc[-1:].copy()
+                        print(f"📊 Using training data shape: {prediction_data.shape}")
+                    else:
+                        raise ValueError("No training data available")
+                        
             except Exception as e:
-                print(f"⚠️ Could not get training data: {str(e)}")
-                raise ValueError(f"Cannot get training data for contribution analysis: {str(e)}")
-            
-            # 모델이 기대하는 feature가 있으면 해당 feature만 선택
-            if feature_names:
-                available_features = [f for f in feature_names if f in prediction_data.columns]
-                missing_features = [f for f in feature_names if f not in prediction_data.columns]
-                
-                if len(missing_features) > 0:
-                    print(f"⚠️ Missing features: {missing_features[:5]}..." if len(missing_features) > 5 else f"⚠️ Missing features: {missing_features}")
-                
-                if len(available_features) >= len(feature_names) * 0.5:  # 50% 이상의 feature가 있어야 함
-                    # 사용 가능한 feature만 선택
-                    prediction_data = prediction_data[available_features]
-                    print(f"📊 Using {len(available_features)} out of {len(feature_names)} features from basic prediction data")
-                    
-                    # 누락된 feature가 있으면 에러 발생
-                    if missing_features:
-                        raise ValueError(f"Cannot perform analysis - model expects features not available in prediction data: {missing_features}")
-                    
-                    # feature 순서를 모델이 기대하는 순서로 맞춤
-                    prediction_data = prediction_data[feature_names]
-                else:
-                    raise ValueError(f"Too many missing features. Available: {len(available_features)}/{len(feature_names)}")
-            
-            print(f"📊 Created basic prediction data")
+                print(f"⚠️ Could not get prediction data: {str(e)}")
+                raise ValueError(f"Cannot get prediction data for contribution analysis: {str(e)}")
             
             print(f"📊 Using prediction data with shape: {prediction_data.shape}")
             print(f"🔍 Prediction data columns: {list(prediction_data.columns)}")
