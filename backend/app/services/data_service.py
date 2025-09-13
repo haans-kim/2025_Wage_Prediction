@@ -50,9 +50,14 @@ class DataService:
         return False
     
     def _save_master_data_to_pickle(self) -> None:
-        """마스터 데이터를 pickle 파일로 저장"""
+        """마스터 데이터를 pickle 파일로 저장 (기존 파일 삭제 후 저장)"""
         try:
             if self.master_data is not None and self.data_info is not None:
+                # 기존 마스터 데이터 파일 삭제
+                if self.pickle_file.exists():
+                    self.pickle_file.unlink()
+                    logging.info(f"Removed old master data pickle file")
+
                 data_package = {
                     'data': self.master_data,
                     'info': self.data_info,
@@ -69,9 +74,14 @@ class DataService:
             logging.error(f"Failed to save master data to pickle: {e}")
     
     def _save_working_data_to_pickle(self) -> None:
-        """작업 데이터를 pickle 파일로 저장"""
+        """작업 데이터를 pickle 파일로 저장 (기존 파일 삭제 후 저장)"""
         try:
             if self.current_data is not None:
+                # 기존 작업 데이터 파일 삭제
+                if self.working_pickle_file.exists():
+                    self.working_pickle_file.unlink()
+                    logging.info(f"Removed old working data pickle file")
+
                 data_package = {
                     'data': self.current_data,
                     'is_augmented': len(self.current_data) != len(self.master_data) if self.master_data is not None else False,

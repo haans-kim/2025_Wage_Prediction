@@ -6,6 +6,7 @@ import os
 from app.core.config import settings
 from app.services.data_service import data_service
 from app.services.augmentation_service import augmentation_service
+from app.utils.cleanup import cleanup_old_pickle_files, get_pickle_files_status
 
 router = APIRouter()
 
@@ -234,6 +235,55 @@ async def get_data_status() -> Dict[str, Any]:
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting data status: {str(e)}")
+
+@router.post("/cleanup")
+async def cleanup_pickle_files() -> Dict[str, Any]:
+    """
+    오래된 pickle 파일들을 정리하고 최신 파일만 유지
+    """
+    try:
+        # 정리 전 상태
+        before_status = get_pickle_files_status()
+
+        # 정리 실행
+        cleanup_old_pickle_files()
+
+        # 정리 후 상태
+        after_status = get_pickle_files_status()
+
+        return {
+            "message": "Cleanup completed successfully",
+            "before": {
+                "model_files": len(before_status["models"]),
+                "data_files": len(before_status["data"])
+            },
+            "after": {
+                "model_files": len(after_status["models"]),
+                "data_files": len(after_status["data"])
+            },
+            "removed": {
+                "model_files": len(before_status["models"]) - len(after_status["models"]),
+                "data_files": len(before_status["data"]) - len(after_status["data"])
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error during cleanup: {str(e)}")
+
+@router.get("/pickle-status")
+async def get_pickle_status() -> Dict[str, Any]:
+    """
+    현재 pickle 파일들의 상태 조회
+    """
+    try:
+        status = get_pickle_files_status()
+        return {
+            "message": "Pickle files status retrieved successfully",
+            "models": status["models"],
+            "data": status["data"],
+            "total_files": len(status["models"]) + len(status["data"])
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting pickle status: {str(e)}")
 
 @router.post("/load-default")
 async def load_default_data() -> Dict[str, Any]:

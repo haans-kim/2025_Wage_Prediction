@@ -569,30 +569,40 @@ class ModelingService:
             
             # 저장 경로 설정
             import os
+            import glob
             from datetime import datetime
-            
+
             # models 디렉토리 생성
             models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'models')
             os.makedirs(models_dir, exist_ok=True)
-            
+
+            # 기존 모델 파일들 모두 삭제 (latest.pkl 포함)
+            old_model_files = glob.glob(os.path.join(models_dir, '*.pkl'))
+            for old_file in old_model_files:
+                try:
+                    os.remove(old_file)
+                    print(f"🗑️ Removed old model file: {os.path.basename(old_file)}")
+                except Exception as e:
+                    print(f"⚠️ Could not remove {os.path.basename(old_file)}: {e}")
+
             # 파일명 생성 (모델명_날짜시간.pkl)
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             if model_name:
                 filename = f"wage_model_{model_name}_{timestamp}"
             else:
                 filename = f"wage_model_{timestamp}"
-            
+
             filepath = os.path.join(models_dir, filename)
-            
+
             # PyCaret의 save_model 사용
             from pycaret.regression import save_model
             save_model(self.current_model, filepath, verbose=False)
-            
+
             # 최신 모델 링크 생성 (latest.pkl)
             latest_path = os.path.join(models_dir, 'latest')
             save_model(self.current_model, latest_path, verbose=False)
-            
-            print(f"✅ Model saved successfully: {filename}.pkl")
+
+            print(f"✅ Model saved successfully: {filename}.pkl (old models removed)")
             return True
             
         except Exception as e:
