@@ -216,9 +216,52 @@ async def get_market_conditions() -> Dict[str, Any]:
     try:
         result = dashboard_service.get_market_conditions()
         return result
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get market conditions: {str(e)}")
+
+
+@router.get("/model-feature-importance")
+async def get_model_feature_importance() -> Dict[str, Any]:
+    """
+    실제 학습된 모델의 Feature Importance 반환
+    """
+    try:
+        if not modeling_service.current_model:
+            raise HTTPException(status_code=404, detail={"error": "No trained model available", "message": "모델을 먼저 학습시켜주세요"})
+
+        # Analysis 서비스에서 Feature Importance 가져오기
+        from app.services.analysis_service import analysis_service
+
+        # Permutation Importance 사용 (더 안정적)
+        importance_data = analysis_service.get_feature_importance(
+            model=modeling_service.current_model,
+            method='permutation',
+            top_n=15
+        )
+
+        if importance_data and 'feature_importance' in importance_data:
+            return importance_data
+        else:
+            # SHAP 시도
+            importance_data = analysis_service.get_feature_importance(
+                model=modeling_service.current_model,
+                method='shap',
+                top_n=15
+            )
+            if importance_data and 'feature_importance' in importance_data:
+                return importance_data
+
+        # 둘 다 실패하면 기본값
+        return {
+            "feature_importance": [],
+            "message": "Feature importance calculation failed, using defaults"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get feature importance: {str(e)}")
 
 @router.post("/custom-scenario")
 async def create_custom_scenario(

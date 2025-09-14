@@ -17,10 +17,10 @@ class HybridPredictionService:
     """하이브리드 임금 예측 시스템"""
 
     def __init__(self):
-        # 구성 요소 가중치
+        # 구성 요소 가중치 (ML 중심으로 변경)
         self.component_weights = {
-            'strategic_rules': 0.7,   # 전략적 규칙 (70%)
-            'ml_validation': 0.2,      # ML 검증 (20%)
+            'strategic_rules': 0.2,   # 전략적 규칙 (20%)
+            'ml_validation': 0.7,      # ML 검증 (70%)
             'residual_learning': 0.1   # 잔차 학습 (10%)
         }
 
@@ -136,24 +136,39 @@ class HybridPredictionService:
         try:
             # ML 모델이 학습되어 있는지 확인
             if not modeling_service.current_model:
-                logging.warning("No ML model available, using strategic prediction only")
-                return None
+                logging.warning("No ML model available, using data-based prediction")
+                # 모델이 없어도 데이터 기반 예측 시도
+                return self._get_data_based_prediction(scenario, custom_params)
 
             # 시나리오 데이터 준비
             scenario_data = self._prepare_scenario_data(scenario, custom_params)
 
-            # PyCaret 모델 예측
-            from pycaret.regression import predict_model
-            predictions = predict_model(modeling_service.current_model, data=scenario_data)
+            # 모델로 직접 예측 (PyCaret 의존성 제거)
+            try:
+                # Pipeline 모델인 경우
+                if hasattr(modeling_service.current_model, 'predict'):
+                    prediction_array = modeling_service.current_model.predict(scenario_data)
+                    total_prediction = float(prediction_array[0])
+                else:
+                    # Fallback to data-based
+                    return self._get_data_based_prediction(scenario, custom_params)
 
-            # 예측값 추출
-            pred_column = 'prediction_label'  # PyCaret 기본 예측 컬럼명
-            if pred_column in predictions.columns:
-                total_prediction = predictions[pred_column].iloc[0]
-            else:
-                total_prediction = predictions.iloc[0, -1]  # 마지막 컬럼
+            except Exception as pred_error:
+                logging.warning(f"Direct prediction failed: {pred_error}")
+                return self._get_data_based_prediction(scenario, custom_params)
 
-            # Base-up과 MI 분리 (60:40 비율)
+            # 실제 데이터 범위 내에서 조정 (과거 데이터의 min/max 참고)
+            if data_service.current_data is not None:
+                wage_cols = [col for col in data_service.current_data.columns if 'wage_increase' in col.lower()]
+                if wage_cols:
+                    historical_mean = data_service.current_data[wage_cols[-1]].mean()
+                    historical_std = data_service.current_data[wage_cols[-1]].std()
+
+                    # 예측값이 너무 벗어나면 조정
+                    if abs(total_prediction - historical_mean) > 2 * historical_std:
+                        total_prediction = historical_mean + np.sign(total_prediction - historical_mean) * historical_std
+
+            # Base-up과 MI 분리 (과거 비율 참고)
             base_up = round(total_prediction * 0.6, 1)
             mi = round(total_prediction * 0.4, 1)
 
@@ -161,12 +176,53 @@ class HybridPredictionService:
                 'base_up': base_up,
                 'mi': mi,
                 'total': round(base_up + mi, 1),
-                'model_type': type(modeling_service.current_model).__name__,
+                'model_type': 'ML Model',
                 'method': 'ml_validation'
             }
 
         except Exception as e:
             logging.error(f"ML validation error: {e}")
+            return self._get_data_based_prediction(scenario, custom_params)
+
+    def _get_data_based_prediction(self, scenario: str, custom_params: Optional[Dict]) -> Dict[str, Any]:
+        """데이터 기반 예측 (모델 없을 때 사용)"""
+        try:
+            if data_service.current_data is None:
+                return None
+
+            # 과거 임금인상률 데이터 분석
+            wage_cols = [col for col in data_service.current_data.columns if 'wage_increase_total' in col.lower()]
+            if not wage_cols:
+                return None
+
+            historical_data = data_service.current_data[wage_cols[-1]].dropna()
+
+            # 시나리오별 조정
+            if scenario == 'conservative':
+                prediction = historical_data.quantile(0.25)
+            elif scenario == 'optimistic':
+                prediction = historical_data.quantile(0.75)
+            else:  # base
+                prediction = historical_data.median()
+
+            # 추세 반영 (최근 3년 평균과 비교)
+            if len(historical_data) >= 3:
+                recent_trend = historical_data.iloc[-3:].mean()
+                prediction = prediction * 0.6 + recent_trend * 0.4
+
+            base_up = round(prediction * 0.6, 1)
+            mi = round(prediction * 0.4, 1)
+
+            return {
+                'base_up': base_up,
+                'mi': mi,
+                'total': round(base_up + mi, 1),
+                'model_type': 'DataBased',
+                'method': 'statistical_analysis'
+            }
+
+        except Exception as e:
+            logging.error(f"Data-based prediction error: {e}")
             return None
 
     def _get_residual_adjustment(self, strategic_pred: Dict, ml_pred: Optional[Dict]) -> Dict[str, Any]:

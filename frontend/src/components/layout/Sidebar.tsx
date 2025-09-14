@@ -7,8 +7,7 @@ import {
   TrendingUp,
   Moon,
   Sun,
-  LineChart,
-  Target
+  LineChart
 } from 'lucide-react';
 import { Button } from '../ui/button';
 
@@ -18,7 +17,6 @@ interface SidebarProps {
 }
 
 const navigation = [
-  { name: '전략적 대시보드', href: '/strategic', icon: Target },
   { name: 'Data 업로드', href: '/data', icon: Upload },
   { name: '모델링', href: '/modeling', icon: Settings },
   { name: 'Dashboard', href: '/dashboard', icon: Activity },

@@ -32,6 +32,11 @@ class ModelingService:
         self.prediction_data = None  # 2025년 예측 대상 데이터
         self.prediction_features = []  # 예측에 사용할 feature 컬럼명
 
+        # 데이터 크기별 모델 리스트 정의
+        self.small_data_models = ['ridge', 'lasso', 'lr', 'gbr']  # 작은 데이터용 모델
+        self.medium_data_models = ['ridge', 'lasso', 'lr', 'gbr', 'rf', 'et']  # 중간 데이터용 모델
+        self.large_data_models = ['ridge', 'lasso', 'lr', 'gbr', 'rf', 'et', 'xgboost', 'lightgbm']  # 큰 데이터용 모델
+
         # 하이브리드 모델 구성 (적은 데이터에 최적화)
         self.validation_models = {
             'ridge': None,  # 메인 예측 모델 (정규화로 과적합 방지)

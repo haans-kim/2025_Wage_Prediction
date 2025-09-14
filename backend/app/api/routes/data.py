@@ -189,6 +189,33 @@ async def validate_current_data() -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error validating data: {str(e)}")
 
+@router.get("/columns")
+async def get_data_columns():
+    """현재 로드된 데이터의 컬럼 정보 반환"""
+    if data_service.current_data is None:
+        raise HTTPException(status_code=404, detail="No data loaded")
+
+    columns = list(data_service.current_data.columns)
+    numeric_columns = list(data_service.current_data.select_dtypes(include=['int64', 'float64']).columns)
+
+    # Feature importance를 위한 컬럼 분석 (타겟 컬럼 제외)
+    target_column = None
+    for col in reversed(columns):
+        if 'increase' in col.lower() or 'rate' in col.lower() or '인상' in col:
+            target_column = col
+            break
+
+    feature_columns = [col for col in numeric_columns if col != target_column]
+
+    return {
+        "all_columns": columns,
+        "numeric_columns": numeric_columns,
+        "feature_columns": feature_columns,
+        "target_column": target_column,
+        "shape": data_service.current_data.shape
+    }
+
+
 @router.get("/info")
 async def get_data_info() -> Dict[str, Any]:
     """
