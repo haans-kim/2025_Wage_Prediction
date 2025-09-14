@@ -7,10 +7,10 @@ echo "================================"
 find_port() {
     local port=$1
     while lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; do
-        echo "⚠️  포트 $port 사용 중... 다음 포트 확인"
+        echo "⚠️  포트 $port 사용 중... 다음 포트 확인" >&2
         port=$((port + 1))
     done
-    echo "✅ 포트 $port 사용 가능!"
+    echo "✅ 포트 $port 사용 가능!" >&2
     echo $port
 }
 
