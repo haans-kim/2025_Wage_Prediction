@@ -6,6 +6,7 @@ import os
 from app.core.config import settings
 from app.services.data_service import data_service
 from app.services.augmentation_service import augmentation_service
+from app.utils.cleanup import cleanup_old_pickle_files, get_pickle_files_status
 
 router = APIRouter()
 
@@ -188,6 +189,33 @@ async def validate_current_data() -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error validating data: {str(e)}")
 
+@router.get("/columns")
+async def get_data_columns():
+    """현재 로드된 데이터의 컬럼 정보 반환"""
+    if data_service.current_data is None:
+        raise HTTPException(status_code=404, detail="No data loaded")
+
+    columns = list(data_service.current_data.columns)
+    numeric_columns = list(data_service.current_data.select_dtypes(include=['int64', 'float64']).columns)
+
+    # Feature importance를 위한 컬럼 분석 (타겟 컬럼 제외)
+    target_column = None
+    for col in reversed(columns):
+        if 'increase' in col.lower() or 'rate' in col.lower() or '인상' in col:
+            target_column = col
+            break
+
+    feature_columns = [col for col in numeric_columns if col != target_column]
+
+    return {
+        "all_columns": columns,
+        "numeric_columns": numeric_columns,
+        "feature_columns": feature_columns,
+        "target_column": target_column,
+        "shape": data_service.current_data.shape
+    }
+
+
 @router.get("/info")
 async def get_data_info() -> Dict[str, Any]:
     """
@@ -234,6 +262,55 @@ async def get_data_status() -> Dict[str, Any]:
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting data status: {str(e)}")
+
+@router.post("/cleanup")
+async def cleanup_pickle_files() -> Dict[str, Any]:
+    """
+    오래된 pickle 파일들을 정리하고 최신 파일만 유지
+    """
+    try:
+        # 정리 전 상태
+        before_status = get_pickle_files_status()
+
+        # 정리 실행
+        cleanup_old_pickle_files()
+
+        # 정리 후 상태
+        after_status = get_pickle_files_status()
+
+        return {
+            "message": "Cleanup completed successfully",
+            "before": {
+                "model_files": len(before_status["models"]),
+                "data_files": len(before_status["data"])
+            },
+            "after": {
+                "model_files": len(after_status["models"]),
+                "data_files": len(after_status["data"])
+            },
+            "removed": {
+                "model_files": len(before_status["models"]) - len(after_status["models"]),
+                "data_files": len(before_status["data"]) - len(after_status["data"])
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error during cleanup: {str(e)}")
+
+@router.get("/pickle-status")
+async def get_pickle_status() -> Dict[str, Any]:
+    """
+    현재 pickle 파일들의 상태 조회
+    """
+    try:
+        status = get_pickle_files_status()
+        return {
+            "message": "Pickle files status retrieved successfully",
+            "models": status["models"],
+            "data": status["data"],
+            "total_files": len(status["models"]) + len(status["data"])
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting pickle status: {str(e)}")
 
 @router.post("/load-default")
 async def load_default_data() -> Dict[str, Any]:

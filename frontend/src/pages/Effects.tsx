@@ -55,6 +55,64 @@ export const Effects: React.FC = () => {
     { name: 'AstraZeneca', value: 12.3, color: 'rgb(239, 68, 68)' }
   ];
 
+  // 인당 영업이익 데이터 (단위: 백만원)
+  const profitPerEmployeeData = {
+    labels: ['2021', '2022', '2023', '2024', '4개년 평균'],
+    datasets: [
+      {
+        label: 'SBL',
+        data: [156, 245, 302, 289, 248],
+        borderColor: 'rgb(59, 130, 246)',
+        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+        tension: 0.4,
+        borderWidth: 4,
+        pointRadius: 2,
+        pointHoverRadius: 3,
+        order: 0,
+      },
+      {
+        label: 'Celltrion',
+        data: [178, 201, 189, 215, 196],
+        borderColor: 'rgb(129, 140, 248)',
+        backgroundColor: 'rgba(129, 140, 248, 0.1)',
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 2,
+        pointHoverRadius: 3,
+      },
+      {
+        label: 'Wuxi',
+        data: [145, 167, 178, 186, 169],
+        borderColor: 'rgb(34, 197, 94)',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 2,
+        pointHoverRadius: 3,
+      },
+      {
+        label: 'Lonza',
+        data: [134, 142, 158, 165, 150],
+        borderColor: 'rgb(168, 85, 247)',
+        backgroundColor: 'rgba(168, 85, 247, 0.1)',
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 2,
+        pointHoverRadius: 3,
+      },
+      {
+        label: 'Roche',
+        data: [123, 135, 142, 148, 137],
+        borderColor: 'rgb(251, 146, 60)',
+        backgroundColor: 'rgba(251, 146, 60, 0.1)',
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 2,
+        pointHoverRadius: 3,
+      },
+    ]
+  };
+
   // 인건비/매출액 비중 데이터
   const laborCostRatioData = {
     labels: ['2021', '2022', '2023', '2024', '4개년 평균'],
@@ -325,9 +383,22 @@ export const Effects: React.FC = () => {
           const numValue = typeof value === 'number' ? value : parseFloat(value);
           return `${numValue.toFixed(1)}%`;
         },
-        color: '#666',
-        font: {
-          size: 9
+        color: (context: any) => {
+          // SBL은 진한 파란색, 나머지는 회색
+          return context.dataset.label === 'SBL' ? 'rgb(59, 130, 246)' : '#666';
+        },
+        font: (context: any) => {
+          // SBL은 굵고 크게, 나머지는 보통 크기
+          if (context.dataset.label === 'SBL') {
+            return {
+              size: 14,
+              weight: 'bold' as const
+            };
+          }
+          return {
+            size: 12,
+            weight: 'normal' as const
+          };
         }
       },
       annotation: {
@@ -447,9 +518,22 @@ export const Effects: React.FC = () => {
           const numValue = typeof value === 'number' ? value : parseFloat(value);
           return `${numValue.toFixed(1)}%`;
         },
-        color: '#666',
-        font: {
-          size: 9
+        color: (context: any) => {
+          // SBL은 진한 파란색, 나머지는 회색
+          return context.dataset.label === 'SBL' ? 'rgb(59, 130, 246)' : '#666';
+        },
+        font: (context: any) => {
+          // SBL은 굵고 크게, 나머지는 보통 크기
+          if (context.dataset.label === 'SBL') {
+            return {
+              size: 14,
+              weight: 'bold' as const
+            };
+          }
+          return {
+            size: 12,
+            weight: 'normal' as const
+          };
         }
       },
       annotation: {
@@ -524,11 +608,219 @@ export const Effects: React.FC = () => {
     }
   };
 
+  // 인당 영업이익 차트 옵션
+  const profitPerEmployeeOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'right' as const,
+        align: 'center' as const,
+        labels: {
+          padding: 10,
+          usePointStyle: true,
+          pointStyle: 'circle',
+          font: {
+            size: 11
+          }
+        }
+      },
+      title: {
+        display: false
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            return `${label}: ${value}백만원`;
+          }
+        },
+        mode: 'index' as const,
+        intersect: false,
+      },
+      datalabels: {
+        display: true,  // 모든 데이터 포인트에 표시
+        align: 'end' as const,
+        anchor: 'end' as const,
+        offset: 3,
+        formatter: (value: any, context: any) => {
+          // 모든 데이터셋에 대해 값 표시
+          return `${value}`;
+        },
+        color: (context: any) => {
+          // SBL은 진한 파란색, 나머지는 회색
+          return context.dataset.label === 'SBL' ? 'rgb(59, 130, 246)' : '#666';
+        },
+        font: (context: any) => {
+          // SBL은 굵고 크게, 나머지는 작고 보통
+          if (context.dataset.label === 'SBL') {
+            return {
+              size: 14,
+              weight: 'bold' as const
+            };
+          }
+          return {
+            size: 12,
+            weight: 'normal' as const
+          };
+        }
+      },
+      annotation: {
+        annotations: {
+          avgSection: {
+            type: 'box' as const,
+            xMin: 3.5,
+            xMax: 4.5,
+            backgroundColor: 'rgba(229, 231, 235, 0.5)',
+            borderColor: 'rgba(156, 163, 175, 0.3)',
+            borderWidth: 1,
+            drawTime: 'beforeDatasetsDraw' as const
+          },
+          verticalLine: {
+            type: 'line' as const,
+            xMin: 3.5,
+            xMax: 3.5,
+            borderColor: 'rgba(156, 163, 175, 0.5)',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            drawTime: 'beforeDatasetsDraw' as const
+          },
+        }
+      }
+    },
+    layout: {
+      padding: {
+        left: 10,
+        right: 10,
+        top: 20,
+        bottom: 20
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: 350,
+        title: {
+          display: false
+        },
+        ticks: {
+          callback: (value: any) => `${value}`,
+          stepSize: 50
+        },
+        grid: {
+          color: 'rgba(0, 0, 0, 0.05)'
+        }
+      },
+      x: {
+        offset: true,
+        title: {
+          display: false
+        },
+        grid: {
+          display: false,
+          offset: true
+        },
+        ticks: {
+          padding: 10,
+          callback: function(value: any, index: number): string {
+            const labels = ['2021', '2022', '2023', '2024', '4개년 평균'];
+            return labels[index] || '';
+          }
+        }
+      }
+    },
+    interaction: {
+      mode: 'index' as const,
+      intersect: false,
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground">기대효과</h1>
         <p className="text-muted-foreground">경쟁사 대비 분석 및 기대효과</p>
+      </div>
+
+      {/* 인당 영업이익 차트와 종합분석 - 맨 위에 추가 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>인당 영업이익 추이</CardTitle>
+            <CardDescription>주요 경쟁사 대비 인당 영업이익 비교 (단위: 백만원)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div style={{ height: '400px', position: 'relative' }}>
+              <Line
+                key="profit-per-employee-chart"
+                data={profitPerEmployeeData}
+                options={profitPerEmployeeOptions}
+                plugins={[ChartDataLabels]}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 종합 분석 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>인당 영업이익 종합분석</CardTitle>
+            <CardDescription>2024년 기준 경쟁력 평가</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* 핵심 지표 */}
+            <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg">
+              <h4 className="font-semibold text-sm mb-3 text-blue-900 dark:text-blue-200">
+                📊 핵심 성과 지표
+              </h4>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">SBL 인당 영업이익</span>
+                  <span className="font-bold text-lg">289백만원</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">업계 평균 대비</span>
+                  <span className="font-bold text-green-600">+47.4%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">전년 대비 성장률</span>
+                  <span className="font-bold text-blue-600">-4.3%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 경쟁력 분석 */}
+            <div className="bg-green-50 dark:bg-green-950/20 p-4 rounded-lg">
+              <h4 className="font-semibold text-sm mb-3 text-green-900 dark:text-green-200">
+                💡 경쟁력 분석
+              </h4>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5">✓</span>
+                  <span>높은 자동화율과 효율적 생산체계로 업계 최고 수준 생산성 달성</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5">✓</span>
+                  <span>CDMO 고부가가치 제품 비중 확대로 수익성 개선</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 mt-0.5">→</span>
+                  <span>2025년 신규 라인 증설로 추가 생산성 향상 예상</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* 시사점 */}
+            <div className="border-l-4 border-blue-500 pl-4 py-2">
+              <p className="text-sm font-medium mb-1">💰 임금인상 여력</p>
+              <p className="text-sm text-muted-foreground">
+                업계 최고 수준의 인당 영업이익은 충분한 임금인상 여력을 시사하며,
+                생산성 기반 보상 체계 구축이 가능함을 보여줍니다.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* 경쟁사 비교 차트 */}
@@ -614,63 +906,7 @@ export const Effects: React.FC = () => {
         </Card>
       </div>
 
-      {/* 기존 효과 섹션 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>경제적 효과</CardTitle>
-            <CardDescription>임금인상의 경제적 파급효과</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span>생산성 향상</span>
-                <span className="font-semibold text-green-600">+3.2%</span>
-              </div>
-              <div className="flex justify-between">
-                <span>이직률 감소</span>
-                <span className="font-semibold text-green-600">-15%</span>
-              </div>
-              <div className="flex justify-between">
-                <span>인재 유치 경쟁력</span>
-                <span className="font-semibold text-green-600">향상</span>
-              </div>
-              <div className="flex justify-between">
-                <span>조직 몰입도</span>
-                <span className="font-semibold text-green-600">+8.5%</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>경쟁력 지표</CardTitle>
-            <CardDescription>경쟁사 대비 포지셔닝</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span>인건비 효율성</span>
-                <span className="font-semibold text-blue-600">1위</span>
-              </div>
-              <div className="flex justify-between">
-                <span>영업이익률</span>
-                <span className="font-semibold text-blue-600">2위</span>
-              </div>
-              <div className="flex justify-between">
-                <span>인당 생산성</span>
-                <span className="font-semibold text-blue-600">상위 20%</span>
-              </div>
-              <div className="flex justify-between">
-                <span>임금 경쟁력</span>
-                <span className="font-semibold text-amber-600">중위권</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
+      {/* 종합 분석 */}
       <Card>
         <CardHeader>
           <CardTitle>종합 분석</CardTitle>

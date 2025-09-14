@@ -16,12 +16,9 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
-import ContributionPlot from '../components/ContributionPlot';
-import { 
-  TrendingUp, 
-  BarChart3, 
-  Settings2, 
-  Play,
+import {
+  TrendingUp,
+  BarChart3,
   AlertTriangle,
   Loader2,
   Zap,
@@ -32,6 +29,8 @@ import {
   Sliders
 } from 'lucide-react';
 import { apiClient } from '../lib/api';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 // Chart.js 구성 요소 등록
 ChartJS.register(
@@ -133,44 +132,150 @@ export const Dashboard: React.FC = () => {
     setError(null);
 
     try {
-      const [templatesRes, variablesRes, indicatorsRes, trendRes, featureRes] = await Promise.all([
-        apiClient.getScenarioTemplates().catch(() => ({ templates: [] })),
-        apiClient.getAvailableVariables().catch(() => ({ variables: [], current_values: {} })),
-        apiClient.getEconomicIndicators().catch(() => ({ indicators: {} })),
-        apiClient.getTrendData().catch(() => null),
-        apiClient.getFeatureImportance('shap', 10).catch(() => null)
+      console.log('Loading dashboard data from:', API_BASE_URL);
+      // Strategic API endpoints 사용 + 실제 모델의 Feature Importance
+      const [scenariosRes, historicalRes, sensitivityRes, featureRes, modelFeatureRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/strategic/scenarios`).then(r => r.json()).catch(err => { console.error('Scenarios error:', err); return { scenarios: [] }; }),
+        fetch(`${API_BASE_URL}/api/strategic/historical`).then(r => r.json()).catch(err => { console.error('Historical error:', err); return { data: [] }; }),
+        fetch(`${API_BASE_URL}/api/strategic/sensitivity`).then(r => r.json()).catch(err => { console.error('Sensitivity error:', err); return { analysis: [] }; }),
+        fetch(`${API_BASE_URL}/api/strategic/feature-importance`).then(r => r.json()).catch(err => { console.error('Feature importance error:', err); return { features: [] }; }),
+        fetch(`${API_BASE_URL}/api/dashboard/model-feature-importance`).then(r => r.json()).catch(err => { console.error('Model feature importance error:', err); return null; })
       ]);
 
-      setScenarioTemplates(templatesRes.templates || []);
-      setAvailableVariables(variablesRes.variables || []);
-      setEconomicIndicators(indicatorsRes.indicators || {});
-      setTrendData(trendRes);
-      setFeatureImportance(featureRes);
-      console.log('Feature importance data:', featureRes);
+      console.log('API responses:', { scenariosRes, historicalRes, sensitivityRes, featureRes, modelFeatureRes });
 
-      // 기본 시나리오로 초기 예측 수행
-      if (variablesRes.current_values) {
-        console.log('Running initial prediction with:', variablesRes.current_values);
-        setCustomVariables(variablesRes.current_values);
-        try {
-          const predictionRes = await apiClient.predictWageIncrease(variablesRes.current_values);
-          console.log('Prediction result:', predictionRes);
-          setCurrentPrediction(predictionRes);
-        } catch (predError) {
-          console.error('Prediction failed:', predError);
+      // 시나리오 템플릿 형식으로 변환
+      const templates = scenariosRes.scenarios?.map((s: any) => ({
+        id: s.name.toLowerCase().replace(' ', '_'),
+        name: s.name,
+        description: s.description || '',
+        variables: s.variables || {}
+      })) || [];
+      setScenarioTemplates(templates);
+
+      // Simple Regression 모델의 9개 조정 가능한 변수 (전년도 인상률 제외)
+      const variables = [
+        { name: 'minimum_wage', display_name: '최저임금 인상률', description: '최저임금 인상률', min_value: 0, max_value: 5, unit: '%', current_value: 1.7 },
+        { name: 'us_eci', display_name: '미국 임금비용지수', description: '미국 ECI', min_value: 2, max_value: 6, unit: '%', current_value: 3.9 },
+        { name: 'gdp_growth', display_name: 'GDP 성장률', description: 'GDP 성장률', min_value: 0, max_value: 4, unit: '%', current_value: 1.8 },
+        { name: 'revenue_growth', display_name: '매출액 증가율', description: '매출액 증가율', min_value: -5, max_value: 10, unit: '%', current_value: 3.0 },
+        { name: 'operating_margin', display_name: '영업이익률', description: '영업이익률', min_value: 0, max_value: 15, unit: '%', current_value: 5.5 },
+        { name: 'cpi', display_name: '소비자물가상승률', description: '소비자물가상승률', min_value: 0, max_value: 5, unit: '%', current_value: 1.9 },
+        { name: 'unemployment_rate', display_name: '실업률', description: '실업률', min_value: 2, max_value: 6, unit: '%', current_value: 3.8 },
+        { name: 'interest_rate', display_name: '시장금리', description: '시장금리', min_value: 1, max_value: 5, unit: '%', current_value: 2.75 },
+        { name: 'exchange_rate', display_name: '원달러환율', description: '원달러환율', min_value: 1000, max_value: 1500, unit: '원', current_value: 1350 }
+      ];
+      setAvailableVariables(variables);
+
+      // 현재 값으로 customVariables 초기화
+      const currentValues = variables.reduce((acc, v) => ({ ...acc, [v.name]: v.current_value }), {});
+      setCustomVariables(currentValues);
+
+      // 경제 지표 설정
+      setEconomicIndicators({
+        current_gdp_growth: {
+          value: 2.2,
+          change: '+0.3%',
+          status: 'stable',
+          last_updated: new Date().toISOString()
+        },
+        current_inflation: {
+          value: 1.8,
+          change: '-0.2%',
+          status: 'stable',
+          last_updated: new Date().toISOString()
+        },
+        current_unemployment: {
+          value: 3.5,
+          change: '+0.1%',
+          status: 'stable',
+          last_updated: new Date().toISOString()
         }
-      } else {
-        console.log('No current_values available for prediction');
+      });
+
+      // Historical data를 트렌드 데이터로 변환
+      if (historicalRes.data && historicalRes.data.length > 0) {
+        const trendData = {
+          trend_data: historicalRes.data.map((d: any) => ({
+            year: d.year,
+            value: d.actual_increase * 100,
+            base_up: d.base_up ? d.base_up * 100 : null,
+            type: d.year === 2026 ? 'prediction' : 'actual'
+          }))
+        };
+        setTrendData(trendData);
+      }
+
+      // Feature importance 설정 (실제 모델 우선, 없으면 기본값)
+      if (modelFeatureRes && modelFeatureRes.feature_importance && modelFeatureRes.feature_importance.length > 0) {
+        // 실제 모델의 Feature Importance 사용
+        console.log('Using actual model feature importance');
+        setFeatureImportance(modelFeatureRes);
+      } else if (featureRes.features && featureRes.features.length > 0) {
+        // 전략적 대시보드의 기본값 사용
+        console.log('Using strategic default feature importance');
+        setFeatureImportance({
+          feature_importance: featureRes.features.map((f: any) => ({
+            feature: f.name,
+            feature_korean: f.korean_name || f.name,
+            importance: f.importance
+          }))
+        });
+      }
+
+      // 초기 예측 수행
+      try {
+        console.log('Making prediction with values:', currentValues);
+        console.log('API URL:', `${API_BASE_URL}/api/strategic/predict`);
+        const response = await fetch(`${API_BASE_URL}/api/strategic/predict`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentValues)
+        });
+        const predictionRes = await response.json();
+        console.log('Strategic prediction result:', predictionRes);
+
+        // Strategic API 응답 형식에 맞게 변환 (result 안의 prediction 사용)
+        const result = predictionRes.result || predictionRes;
+        const prediction = result.prediction || {};
+
+        const formattedPrediction: PredictionResult = {
+          prediction: (prediction.total || 0) / 100,  // 4.0% -> 0.04
+          base_up_rate: (prediction.base_up || 0) / 100,  // 2.4% -> 0.024
+          performance_rate: (prediction.mi || 0) / 100,  // 1.6% -> 0.016
+          confidence_interval: [
+            ((prediction.total || 0) - 0.5) / 100,
+            ((prediction.total || 0) + 0.5) / 100
+          ] as [number, number],
+          confidence_level: result.confidence?.overall || 0.85,
+          input_variables: currentValues,
+          breakdown: {
+            base_up: {
+              rate: (prediction.base_up || 0) / 100,
+              percentage: prediction.base_up || 0,
+              description: 'Base-up 인상률',
+              calculation: ''
+            },
+            performance: {
+              rate: (prediction.mi || 0) / 100,
+              percentage: prediction.mi || 0,
+              description: '성과급 인상률',
+              calculation: ''
+            },
+            total: {
+              rate: (prediction.total || 0) / 100,
+              percentage: prediction.total || 0,
+              description: '총 인상률'
+            }
+          }
+        };
+        setCurrentPrediction(formattedPrediction);
+      } catch (predError) {
+        console.error('Strategic prediction failed:', predError);
       }
     } catch (error: any) {
       console.error('Dashboard data loading failed:', error);
-      
-      // 모델이 없는 경우 특별한 처리
-      if (error?.response?.status === 404 && error?.response?.data?.detail?.error === "No trained model available") {
-        setError('모델이 훈련되지 않았습니다. Analysis 페이지에서 먼저 모델을 훈련해주세요.');
-      } else {
-        setError('대시보드 데이터를 불러오는 중 오류가 발생했습니다.');
-      }
+      setError('대시보드 데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(null);
     }
@@ -179,15 +284,55 @@ export const Dashboard: React.FC = () => {
   const handleScenarioSelect = async (templateId: string) => {
     setSelectedScenario(templateId);
     const template = scenarioTemplates.find(t => t.id === templateId);
-    
+
     if (template) {
       setCustomVariables(template.variables);
       setLoading('prediction');
       setError(null);
 
       try {
-        const predictionRes = await apiClient.predictWageIncrease(template.variables);
-        setCurrentPrediction(predictionRes);
+        // Strategic predict endpoint 사용
+        const response = await fetch(`${API_BASE_URL}/api/strategic/predict`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(template.variables)
+        });
+        const predictionRes = await response.json();
+
+        const result = predictionRes.result || predictionRes;
+        const prediction = result.prediction || {};
+
+        const formattedPrediction: PredictionResult = {
+          prediction: (prediction.total || 0) / 100,
+          base_up_rate: (prediction.base_up || 0) / 100,
+          performance_rate: (prediction.mi || 0) / 100,
+          confidence_interval: [
+            ((prediction.total || 0) - 0.5) / 100,
+            ((prediction.total || 0) + 0.5) / 100
+          ] as [number, number],
+          confidence_level: result.confidence?.overall || 0.85,
+          input_variables: template.variables,
+          breakdown: {
+            base_up: {
+              rate: (prediction.base_up || 0) / 100,
+              percentage: prediction.base_up || 0,
+              description: 'Base-up 인상률',
+              calculation: ''
+            },
+            performance: {
+              rate: (prediction.mi || 0) / 100,
+              percentage: prediction.mi || 0,
+              description: '성과급 인상률',
+              calculation: ''
+            },
+            total: {
+              rate: (prediction.total || 0) / 100,
+              percentage: prediction.total || 0,
+              description: '총 인상률'
+            }
+          }
+        };
+        setCurrentPrediction(formattedPrediction);
       } catch (error) {
         setError(error instanceof Error ? error.message : '예측 중 오류가 발생했습니다.');
       } finally {
@@ -221,8 +366,54 @@ export const Dashboard: React.FC = () => {
 
     try {
       const variablesToUse = variables || customVariables;
-      const predictionRes = await apiClient.predictWageIncrease(variablesToUse);
-      setCurrentPrediction(predictionRes);
+
+      // Simple Regression predict endpoint 사용
+      const response = await fetch(`${API_BASE_URL}/api/strategic/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          year: 2026,
+          scenario: 'custom',
+          custom_params: variablesToUse  // custom_params로 전달
+        })
+      });
+      const predictionRes = await response.json();
+
+      // Strategic API 응답 형식에 맞게 변환
+      const result = predictionRes.result || predictionRes;
+      const prediction = result.prediction || {};
+
+      const formattedPrediction: PredictionResult = {
+        prediction: (prediction.total || 0) / 100,
+        base_up_rate: (prediction.base_up || 0) / 100,
+        performance_rate: (prediction.mi || 0) / 100,
+        confidence_interval: [
+          ((prediction.total || 0) - 0.5) / 100,
+          ((prediction.total || 0) + 0.5) / 100
+        ] as [number, number],
+        confidence_level: result.confidence || 0.85,
+        input_variables: variablesToUse,
+        breakdown: {
+          base_up: {
+            rate: (prediction.base_up || 0) / 100,
+            percentage: prediction.base_up || 0,
+            description: 'Base-up 인상률',
+            calculation: ''
+          },
+          performance: {
+            rate: (prediction.mi || 0) / 100,
+            percentage: prediction.mi || 0,
+            description: '성과급 인상률',
+            calculation: ''
+          },
+          total: {
+            rate: (prediction.total || 0) / 100,
+            percentage: prediction.total || 0,
+            description: '총 인상률'
+          }
+        }
+      };
+      setCurrentPrediction(formattedPrediction);
     } catch (error) {
       setError(error instanceof Error ? error.message : '사용자 정의 예측 중 오류가 발생했습니다.');
     } finally {
@@ -240,14 +431,21 @@ export const Dashboard: React.FC = () => {
     setError(null);
 
     try {
-      const scenarios = scenarioTemplates.map(template => ({
-        scenario_name: template.name,
-        variables: template.variables,
-        description: template.description
-      }));
+      // Strategic scenarios endpoint 사용
+      const response = await fetch(`${API_BASE_URL}/api/strategic/scenarios`);
+      const scenariosRes = await response.json();
 
-      const analysisRes = await apiClient.runScenarioAnalysis(scenarios);
-      setScenarioResults(analysisRes.results || []);
+      const results = scenariosRes.scenarios?.map((scenario: any, index: number) => ({
+        scenario_name: scenario.name,
+        prediction: scenario.total_increase,
+        confidence_interval: [
+          scenario.total_increase - 0.005,
+          scenario.total_increase + 0.005
+        ],
+        rank: index === 0 ? 1 : (index === scenariosRes.scenarios.length - 1 ? 3 : 2)
+      })) || [];
+
+      setScenarioResults(results);
     } catch (error) {
       setError(error instanceof Error ? error.message : '시나리오 분석 중 오류가 발생했습니다.');
     } finally {
@@ -267,38 +465,41 @@ export const Dashboard: React.FC = () => {
   };
 
   const getTopImportantVariables = () => {
-    // Feature Importance가 없으면 기본 5개 변수 반환
+    // Simple Regression 모델의 9개 변수를 중요도 순으로 반환 (전년도 인상률 제외)
+    // Feature Importance API에서 받은 순서대로 사용
     if (!featureImportance || !featureImportance.feature_importance) {
-      return availableVariables.slice(0, 5);
+      // Feature Importance가 없으면 기본 순서로 반환
+      return availableVariables;
     }
 
-    // Feature 이름을 Dashboard 변수 이름으로 매핑 (올바른 Feature Importance 기준)
+    // Feature 이름을 Dashboard 변수 이름으로 매핑 (Simple Regression 모델)
     const featureToVariableMap: { [key: string]: string } = {
-      // 기존 변수들
-      'wage_increase_bu_group': 'wage_increase_bu_group',
-      'gdp_growth_kr': 'gdp_growth',
-      'market_size_growth_rate': 'market_size_growth_rate',
-      'hcroi_sbl': 'hcroi_sbl',
-      'unemployment_rate_kr': 'unemployment_rate',
-      // 올바른 상위 Feature Importance (이전 스크린샷 기준)
-      'labor_to_revenue_sbl': 'labor_cost_rate_sbl',        // 1. 인건비 비중 (3.5%)
-      'cpi_kr': 'cpi_kr',                                   // 2. 소비자물가상승률 (3.0%)
-      'eci_usa': 'eci_usa',                                 // 3. 미국 임금비용지수 (2.0%)
-      'labor_cost_per_employee_sbl': 'labor_cost_per_employee_sbl',  // 4. 인당 인건비 (1.8%)
-      'labor_cost_ratio_change_sbl': 'labor_cost_ratio_change_sbl'   // 기타 변수
+      'minimum_wage_adjustment': 'minimum_wage',  // 최저임금 조정효과
+      'us_eci': 'us_eci',                        // 미국 임금비용지수
+      'gdp_adjustment': 'gdp_growth',            // GDP 성장률 조정
+      'revenue_growth': 'revenue_growth',        // 매출액 증가율
+      'operating_margin': 'operating_margin',    // 영업이익률
+      'cpi': 'cpi',                             // 소비자물가상승률
+      'unemployment_rate': 'unemployment_rate',  // 실업률
+      'interest_rate': 'interest_rate',         // 시장금리
+      'exchange_rate': 'exchange_rate'          // 원달러환율
     };
 
-    // 모든 Feature Importance를 순회하면서 Dashboard 변수에 매핑되는 것들 찾기
+    // Feature Importance 순서대로 변수 매핑
     interface MappedFeature {
       variable: Variable;
       importance: number;
       feature: string;
     }
     const mappedFeatures: MappedFeature[] = [];
+
     for (const featureItem of featureImportance.feature_importance) {
-      const featureName = featureItem.feature;
+      const featureName = featureItem.feature || featureItem.name;
+      // previous_year_increase는 고정값이므로 제외
+      if (featureName === 'previous_year_increase') continue;
+
       const variableName = featureToVariableMap[featureName];
-      
+
       if (variableName) {
         const variable = availableVariables.find(v => v.name === variableName);
         if (variable) {
@@ -311,35 +512,23 @@ export const Dashboard: React.FC = () => {
       }
     }
 
-    // 중요도 순으로 정렬
+    // 중요도 순으로 정렬 (이미 정렬되어 있지만 확실하게)
     mappedFeatures.sort((a, b) => b.importance - a.importance);
-    
-    // 상위 Feature들 선택 (최대 5개)
-    const importantVariables: Variable[] = mappedFeatures
-      .slice(0, Math.min(5, mappedFeatures.length))
-      .map(item => item.variable);
 
-    // 5개가 안 되면 나머지를 기본 변수로 채움
-    if (importantVariables.length < 5) {
-      const remainingCount = 5 - importantVariables.length;
-      const remainingVariables = availableVariables
-        .filter(v => !importantVariables.some(iv => iv.name === v.name))
-        .slice(0, remainingCount);
-      importantVariables.push(...remainingVariables);
+    // 매핑된 변수들 반환
+    const importantVariables: Variable[] = mappedFeatures.map(item => item.variable);
+
+    // 매핑되지 않은 변수가 있으면 추가 (순서 유지)
+    for (const variable of availableVariables) {
+      if (!importantVariables.some(v => v.name === variable.name)) {
+        importantVariables.push(variable);
+      }
     }
 
-    console.log('🔍 Feature Importance Debug:');
-    console.log('Available variables:', availableVariables.map(v => `${v.name}: ${v.display_name}`));
-    console.log('Feature importance data:', featureImportance?.feature_importance?.slice(0, 5));
-    console.log('Feature to variable mapping:', featureToVariableMap);
-    console.log('Mapped features:', mappedFeatures.map(mf => `${mf.feature} → ${mf.variable.name} (${mf.variable.display_name}) - ${(mf.importance * 100).toFixed(1)}%`));
-    console.log('Final important variables for sliders:', 
-      importantVariables.map((v, i) => {
-        const mapped = mappedFeatures.find(mf => mf.variable.name === v.name);
-        return `${i+1}. ${v.name}: ${v.display_name}${mapped ? ` (${(mapped.importance * 100).toFixed(1)}%)` : ' (default)'}`;
-      })
-    );
-    
+    console.log('🔍 Simple Regression Variables:');
+    console.log('Feature importance:', featureImportance?.feature_importance?.slice(0, 9));
+    console.log('Mapped variables:', importantVariables.map((v, i) => `${i+1}. ${v.display_name} (${v.name})`));
+
     return importantVariables;
   };
 
@@ -541,57 +730,38 @@ export const Dashboard: React.FC = () => {
     }
 
     const data = featureImportance.feature_importance;
-    
-    // 현재 예측값을 백분율로 변환
-    
-    // 상위 8개 주요 변수만 선택하고 나머지는 '기타'로 묶기
-    const topFeatures = data.slice(0, 8);
-    const otherFeatures = data.slice(8);
-    
-    // 전체 importance의 합
-    
-    // 각 feature의 기여도를 극대화하여 계산
-    // 상위 3개는 양수, 나머지는 음수로 설정하여 대비 극대화
+
+    // 모든 10개 변수를 표시 (others 없이)
+    const allFeatures = data.slice(0, 10);  // 최대 10개까지만
+
+    // 각 feature의 기여도를 계산
     interface FeatureContribution {
       feature: string;
+      feature_korean: string;
       contribution: number;
       importance: number;
       value: number;
     }
-    
-    const featureContributions: FeatureContribution[] = topFeatures.map((item: any, index: number) => {
-      // Permutation importance 값을 그대로 사용 (모두 양수)
-      const normalizedImportance = item.importance / topFeatures[0].importance;
-      
+
+    const featureContributions: FeatureContribution[] = allFeatures.map((item: any, index: number) => {
+      // importance 값을 그대로 사용 (모두 양수)
+      const normalizedImportance = item.importance / allFeatures[0].importance;
+
       return {
-        feature: item.feature,
+        feature: item.feature || item.name,
+        feature_korean: item.feature_korean || item.korean_name || item.feature || item.name,
         contribution: normalizedImportance * 2, // 시각화를 위해 스케일 조정
         importance: item.importance,
         value: item.importance // 표시용 원본 값
       };
     });
-    
-    // 기타 항목
-    if (otherFeatures.length > 0) {
-      const othersImportance = otherFeatures.reduce((sum: number, item: any) => sum + item.importance, 0) / otherFeatures.length;
-      const normalizedOthers = othersImportance / topFeatures[0].importance;
-      featureContributions.push({
-        feature: 'others',
-        contribution: normalizedOthers * 2,
-        importance: othersImportance,
-        value: othersImportance
-      });
-    }
-    
-    // 기여도 순으로 정렬 (절대값 기준)
-    featureContributions.sort((a: FeatureContribution, b: FeatureContribution) => Math.abs(b.contribution) - Math.abs(a.contribution));
-    
-    // 레이블과 데이터 준비 - API에서 제공하는 feature_korean 사용
-    const labels = featureContributions.map((d: FeatureContribution, index: number) => {
-      // topFeatures에서 feature_korean 찾기
-      const originalFeature = topFeatures.find((f: any) => f.feature === d.feature);
-      const name = originalFeature?.feature_korean || d.feature;
-      return name; // 숫자 제거, 이름만 표시
+
+    // 기여도 순으로 정렬 (이미 정렬되어 있지만 확실하게)
+    featureContributions.sort((a: FeatureContribution, b: FeatureContribution) => b.importance - a.importance);
+
+    // 레이블과 데이터 준비
+    const labels = featureContributions.map((d: FeatureContribution) => {
+      return d.feature_korean; // 한글 이름 표시
     });
     
     const contributions = featureContributions.map((d: FeatureContribution) => d.contribution);
@@ -620,9 +790,9 @@ export const Dashboard: React.FC = () => {
       },
       title: {
         display: true,
-        text: '주요 변수별 중요도 분석 (Permutation Importance)',
+        text: '주요 변수별 중요도 분석 (Regression Weights)',
         font: {
-          size: 16,
+          size: 20,
           weight: 'bold' as const
         }
       },
@@ -637,13 +807,16 @@ export const Dashboard: React.FC = () => {
             }
             return `기여도: ${value.toFixed(2)}`;
           }
+        },
+        bodyFont: {
+          size: 14
         }
       },
       datalabels: {
         color: 'white',
         font: {
           weight: 'bold' as const,
-          size: 12
+          size: 14
         },
         anchor: 'center' as const,
         align: 'center' as const,
@@ -662,12 +835,19 @@ export const Dashboard: React.FC = () => {
         beginAtZero: true,
         title: {
           display: true,
-          text: '임금인상률 기여도 (%p)'
+          text: '임금인상률 기여도 (%p)',
+          font: {
+            size: 14,
+            weight: 500
+          }
         },
         ticks: {
           callback: (value: any) => {
             const sign = value >= 0 ? '+' : '';
             return `${sign}${value}%`;
+          },
+          font: {
+            size: 12
           }
         },
         grid: {
@@ -684,7 +864,8 @@ export const Dashboard: React.FC = () => {
         ticks: {
           autoSkip: false,
           font: {
-            size: 11
+            size: 14,
+            weight: 500
           }
         },
         grid: {
@@ -800,15 +981,15 @@ export const Dashboard: React.FC = () => {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">GDP:</span>
-                <span className="font-medium">{`${economicIndicators.current_gdp_growth || '-'}%`}</span>
+                <span className="font-medium">{economicIndicators.current_gdp_growth ? `${economicIndicators.current_gdp_growth.value}%` : '-%'}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">인플레:</span>
-                <span className="font-medium">{`${economicIndicators.current_inflation || '-'}%`}</span>
+                <span className="font-medium">{economicIndicators.current_inflation ? `${economicIndicators.current_inflation.value}%` : '-%'}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">실업률:</span>
-                <span className="font-medium">{`${economicIndicators.current_unemployment || '-'}%`}</span>
+                <span className="font-medium">{economicIndicators.current_unemployment ? `${economicIndicators.current_unemployment.value}%` : '-%'}</span>
               </div>
             </div>
           </CardContent>
@@ -875,28 +1056,8 @@ export const Dashboard: React.FC = () => {
           </Card>
         </div>
 
-        {/* 오른쪽: 기여도 분석, 영향 요인 분석, 트렌드 분석 (2/3 너비) */}
+        {/* 오른쪽: 영향 요인 분석과 트렌드 분석 (2/3 너비) */}
         <div className="lg:col-span-2 space-y-6">
-          {/* 기여도 분석 */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Target className="mr-2 h-5 w-5" />
-                기여도 분석
-              </CardTitle>
-              <CardDescription>
-                2026년도 5.4% 예측에 대한 각 요인의 개별 기여도
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ContributionPlot 
-                sampleIndex={0}
-                topN={10}
-                height={600}
-              />
-            </CardContent>
-          </Card>
-
           {/* 영향 요인 분석 */}
           <Card>
             <CardHeader>
@@ -915,17 +1076,17 @@ export const Dashboard: React.FC = () => {
                 
                 if (chartData) {
                   return (
-                    <div className="h-64">
-                      <Chart 
+                    <div className="h-96">
+                      <Chart
                         type='bar'
-                        data={chartData} 
-                        options={getWaterfallChartOptions()} 
+                        data={chartData}
+                        options={getWaterfallChartOptions()}
                       />
                     </div>
                   );
                 } else {
                   return (
-                    <div className="h-64 bg-background border rounded-md flex items-center justify-center">
+                    <div className="h-96 bg-background border rounded-md flex items-center justify-center">
                       <div className="text-center">
                         <Loader2 className="h-8 w-8 text-muted-foreground mx-auto mb-2 animate-spin" />
                         <p className="text-muted-foreground">데이터 로딩 중...</p>

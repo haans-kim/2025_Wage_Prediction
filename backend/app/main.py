@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi import Request
-from app.api.routes import data, modeling, analysis, dashboard
+from app.api.routes import data, modeling, analysis, dashboard, strategic
 from app.core.config import settings
 import os
 
@@ -38,6 +38,7 @@ app.include_router(data.router, prefix="/api/data", tags=["data"])
 app.include_router(modeling.router, prefix="/api/modeling", tags=["modeling"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(strategic.router, prefix="/api/strategic", tags=["strategic"])
 
 @app.get("/")
 async def root():
