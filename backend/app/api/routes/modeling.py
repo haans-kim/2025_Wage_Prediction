@@ -155,15 +155,46 @@ async def evaluate_current_model() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Model evaluation failed: {str(e)}")
 
 @router.post("/predict")
-async def predict_with_model() -> Dict[str, Any]:
+async def predict_with_model(input_data: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     """
-    현재 모델로 테스트 데이터 예측
+    현재 모델로 예측 (새로운 데이터 또는 테스트 데이터)
     """
     try:
-        result = modeling_service.predict_with_model()
-        
-        return result
-        
+        if input_data:
+            # 새로운 데이터로 예측
+            import pandas as pd
+            import numpy as np
+
+            if not modeling_service.current_model:
+                raise HTTPException(status_code=404, detail="No trained model available")
+
+            # DataFrame으로 변환
+            df = pd.DataFrame([input_data])
+
+            # 모델로 예측
+            if hasattr(modeling_service.current_model, 'predict'):
+                prediction = modeling_service.current_model.predict(df)
+                prediction_value = float(prediction[0])
+            else:
+                raise ValueError("Model does not have predict method")
+
+            # Base-up과 MI 분리 (역사적 비율 기반)
+            base_up = round(prediction_value * 0.6, 2)
+            mi = round(prediction_value * 0.4, 2)
+
+            return {
+                "prediction": prediction_value,
+                "base_up": base_up,
+                "mi": mi,
+                "total": round(base_up + mi, 2),
+                "input_features": input_data,
+                "model_type": str(type(modeling_service.current_model).__name__)
+            }
+        else:
+            # 기존 테스트 데이터로 예측
+            result = modeling_service.predict_with_model()
+            return result
+
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
