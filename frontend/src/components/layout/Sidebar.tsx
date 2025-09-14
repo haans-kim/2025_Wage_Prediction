@@ -1,14 +1,14 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { 
-  Upload, 
-  Settings, 
-  BarChart3, 
-  Activity, 
+import {
+  Upload,
+  Settings,
+  Activity,
   TrendingUp,
   Moon,
   Sun,
-  LineChart
+  LineChart,
+  Target
 } from 'lucide-react';
 import { Button } from '../ui/button';
 
@@ -18,9 +18,9 @@ interface SidebarProps {
 }
 
 const navigation = [
+  { name: '전략적 대시보드', href: '/strategic', icon: Target },
   { name: 'Data 업로드', href: '/data', icon: Upload },
   { name: '모델링', href: '/modeling', icon: Settings },
-  { name: 'Analysis', href: '/analysis', icon: BarChart3 },
   { name: 'Dashboard', href: '/dashboard', icon: Activity },
   { name: '기대효과', href: '/effects', icon: TrendingUp },
 ];

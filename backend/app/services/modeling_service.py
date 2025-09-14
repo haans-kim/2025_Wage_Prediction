@@ -31,12 +31,26 @@ class ModelingService:
         self.feature_names = None  # Store feature names for prediction
         self.prediction_data = None  # 2025년 예측 대상 데이터
         self.prediction_features = []  # 예측에 사용할 feature 컬럼명
-        
-        # 데이터 크기에 따른 모델 선택
-        self.small_data_models = ['lr', 'ridge', 'lasso', 'en', 'dt']
-        self.medium_data_models = ['lr', 'ridge', 'lasso', 'en', 'dt', 'rf', 'gbr']
-        self.large_data_models = ['lr', 'ridge', 'lasso', 'en', 'dt', 'rf', 'gbr', 'xgboost', 'lightgbm']
-        
+
+        # 하이브리드 모델 구성 (적은 데이터에 최적화)
+        self.validation_models = {
+            'ridge': None,  # 메인 예측 모델 (정규화로 과적합 방지)
+            'lasso': None,  # Feature selection
+            'lr': None,     # Baseline
+            'gbr': None     # Feature importance & 비선형 패턴
+        }
+
+        # 모델 역할 정의
+        self.model_roles = {
+            'ridge': {'weight': 0.5, 'role': 'main_prediction', 'description': '안정적 선형 예측'},
+            'lasso': {'weight': 0.2, 'role': 'feature_selection', 'description': '중요 변수 선택'},
+            'lr': {'weight': 0.1, 'role': 'baseline', 'description': '기준선 모델'},
+            'gbr': {'weight': 0.2, 'role': 'nonlinear_capture', 'description': '비선형 패턴 포착'}
+        }
+
+        # Feature importance 저장
+        self.feature_importance = {}
+
         # 초기화 시 저장된 최신 모델 자동 로드 시도
         self._load_latest_model_if_exists()
     
