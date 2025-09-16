@@ -13,7 +13,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/strategic" replace />} />
+          <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="data" element={<DataUpload />} />
           <Route path="modeling" element={<Modeling />} />
           <Route path="analysis" element={<Analysis />} />

@@ -241,8 +241,8 @@ export const Dashboard: React.FC = () => {
 
         const formattedPrediction: PredictionResult = {
           prediction: (prediction.total || 0) / 100,  // 4.0% -> 0.04
-          base_up_rate: (prediction.base_up || 0) / 100,  // 2.4% -> 0.024
-          performance_rate: (prediction.mi || 0) / 100,  // 1.6% -> 0.016
+          base_up_rate: ((prediction.total || 0) / 100) - 0.021,  // 총인상률 - 성과인상률(2.1%)
+          performance_rate: 0.021,  // 2.1%로 고정
           confidence_interval: [
             ((prediction.total || 0) - 0.5) / 100,
             ((prediction.total || 0) + 0.5) / 100
@@ -251,14 +251,14 @@ export const Dashboard: React.FC = () => {
           input_variables: currentValues,
           breakdown: {
             base_up: {
-              rate: (prediction.base_up || 0) / 100,
-              percentage: prediction.base_up || 0,
+              rate: ((prediction.total || 0) / 100) - 0.021,  // 총인상률 - 성과인상률(2.1%)
+              percentage: (prediction.total || 0) - 2.1,
               description: 'Base-up 인상률',
               calculation: ''
             },
             performance: {
-              rate: (prediction.mi || 0) / 100,
-              percentage: prediction.mi || 0,
+              rate: 0.021,  // 2.1%로 고정
+              percentage: 2.1,
               description: '성과급 인상률',
               calculation: ''
             },
@@ -304,8 +304,8 @@ export const Dashboard: React.FC = () => {
 
         const formattedPrediction: PredictionResult = {
           prediction: (prediction.total || 0) / 100,
-          base_up_rate: (prediction.base_up || 0) / 100,
-          performance_rate: (prediction.mi || 0) / 100,
+          base_up_rate: ((prediction.total || 0) / 100) - 0.021,  // 총인상률 - 성과인상률(2.1%)
+          performance_rate: 0.021,  // 2.1%로 고정
           confidence_interval: [
             ((prediction.total || 0) - 0.5) / 100,
             ((prediction.total || 0) + 0.5) / 100
@@ -314,14 +314,14 @@ export const Dashboard: React.FC = () => {
           input_variables: template.variables,
           breakdown: {
             base_up: {
-              rate: (prediction.base_up || 0) / 100,
-              percentage: prediction.base_up || 0,
+              rate: ((prediction.total || 0) / 100) - 0.021,  // 총인상률 - 성과인상률(2.1%)
+              percentage: (prediction.total || 0) - 2.1,
               description: 'Base-up 인상률',
               calculation: ''
             },
             performance: {
-              rate: (prediction.mi || 0) / 100,
-              percentage: prediction.mi || 0,
+              rate: 0.021,  // 2.1%로 고정
+              percentage: 2.1,
               description: '성과급 인상률',
               calculation: ''
             },
@@ -385,8 +385,8 @@ export const Dashboard: React.FC = () => {
 
       const formattedPrediction: PredictionResult = {
         prediction: (prediction.total || 0) / 100,
-        base_up_rate: (prediction.base_up || 0) / 100,
-        performance_rate: (prediction.mi || 0) / 100,
+        base_up_rate: ((prediction.total || 0) / 100) - 0.021,  // 총인상률 - 성과인상률(2.1%)
+        performance_rate: 0.021,  // 2.1%로 고정
         confidence_interval: [
           ((prediction.total || 0) - 0.5) / 100,
           ((prediction.total || 0) + 0.5) / 100
@@ -395,14 +395,14 @@ export const Dashboard: React.FC = () => {
         input_variables: variablesToUse,
         breakdown: {
           base_up: {
-            rate: (prediction.base_up || 0) / 100,
-            percentage: prediction.base_up || 0,
+            rate: ((prediction.total || 0) / 100) - 0.021,  // 총인상률 - 성과인상률(2.1%)
+            percentage: (prediction.total || 0) - 2.1,
             description: 'Base-up 인상률',
             calculation: ''
           },
           performance: {
-            rate: (prediction.mi || 0) / 100,
-            percentage: prediction.mi || 0,
+            rate: 0.021,  // 2.1%로 고정
+            percentage: 2.1,
             description: '성과급 인상률',
             calculation: ''
           },
