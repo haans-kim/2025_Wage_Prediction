@@ -85,7 +85,7 @@ async def compare_models(n_select: int = Query(default=3, ge=1, le=10)) -> Dict[
             print("🧹 Cleared analysis caches after model comparison")
             
         except Exception as dashboard_error:
-            print(f"⚠️ ExplainerDashboard update failed: {dashboard_error}")
+            print(f"[WARNING] ExplainerDashboard update failed: {dashboard_error}")
         
         return {
             **result,
@@ -120,10 +120,10 @@ async def train_specific_model(request: ModelTrainingRequest) -> Dict[str, Any]:
             analysis_service._shap_cache.clear()
             print("🧹 Cleared analysis caches for new model")
             
-            print("✅ ExplainerDashboard will be recreated on next request with new model data")
+            print("[OK] ExplainerDashboard will be recreated on next request with new model data")
             
         except Exception as dashboard_error:
-            print(f"⚠️ ExplainerDashboard update failed: {dashboard_error}")
+            print(f"[WARNING] ExplainerDashboard update failed: {dashboard_error}")
             # Dashboard 오류가 있어도 모델 학습 결과는 반환
         
         return {

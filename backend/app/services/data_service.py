@@ -427,7 +427,7 @@ class DataService:
         # Target 컬럼 식별 (대소문자 무시하고 target이 포함된 컬럼 찾기)
         target_columns = [col for col in original_df.columns if 'target' in col.lower()]
         
-        print(f"📊 Data Augmentation (Target 제외 10배수):")
+        print(f"[DATA] Data Augmentation (Target 제외 10배수):")
         print(f"   - Original size: {original_size}")
         print(f"   - Target columns found: {target_columns}")
         print(f"   - Multiplier: 10")

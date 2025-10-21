@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(py -3.10 --version:*)",
+      "Bash(py -3.10 -m venv venv)",
+      "Bash(venvScriptspython.exe -m pip install --upgrade pip)",
+      "Bash(./venv/Scripts/python.exe -m pip:*)",
+      "Bash(npm install:*)",
+      "Bash(./venv/Scripts/python.exe:*)",
+      "Bash(find:*)",
+      "Bash(npm start)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(set PORT=3001)",
+      "Bash(dir:*)",
+      "Bash(cat:*)",
+      "Bash(taskkill:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

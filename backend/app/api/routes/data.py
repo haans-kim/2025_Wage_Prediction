@@ -49,7 +49,7 @@ async def upload_data(file: UploadFile = File(...)) -> Dict[str, Any]:
         
         # 파일 내용 읽기
         contents = await file.read()
-        print(f"📊 File size: {len(contents)} bytes")
+        print(f"[DATA] File size: {len(contents)} bytes")
         
         # 파일 저장
         saved_path = data_service.save_uploaded_file(contents, file.filename)
@@ -61,7 +61,7 @@ async def upload_data(file: UploadFile = File(...)) -> Dict[str, Any]:
         
         # 모델링 준비 상태 확인
         validation_result = data_service.validate_data_for_modeling()
-        print(f"✅ Validation: {validation_result.get('is_valid', False)}")
+        print(f"[OK] Validation: {validation_result.get('is_valid', False)}")
         
         # 요약 정보 생성
         summary = data_service.get_data_summary()
@@ -81,7 +81,7 @@ async def upload_data(file: UploadFile = File(...)) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        print(f"❌ Error processing file: {str(e)}")
+        print(f"[ERROR] Error processing file: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")

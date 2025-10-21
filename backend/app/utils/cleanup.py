@@ -43,7 +43,7 @@ def cleanup_old_pickle_files():
                 except Exception as e:
                     logging.error(f"Failed to remove {file_path}: {e}")
 
-    print("✅ Cleanup completed - keeping only latest pickle files")
+    print("[OK] Cleanup completed - keeping only latest pickle files")
 
 
 def get_pickle_files_status():

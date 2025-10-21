@@ -137,7 +137,7 @@ class ModelingService:
         if prediction_data_mask.any():
             self.prediction_data = df[prediction_data_mask].copy()
             self.prediction_features = model_config.get('feature_columns', [])
-            print(f"📊 Separated {len(self.prediction_data)} rows for 2026 prediction (2025 data with no target)")
+            print(f"[DATA] Separated {len(self.prediction_data)} rows for 2026 prediction (2025 data with no target)")
         else:
             self.prediction_data = None
             self.prediction_features = []
@@ -149,7 +149,7 @@ class ModelingService:
         
         if removed_rows > 0:
             info['removed_target_missing'] = removed_rows
-            print(f"📊 Removed {removed_rows} rows with missing target values (likely future prediction data)")
+            print(f"[DATA] Removed {removed_rows} rows with missing target values (likely future prediction data)")
         
         # 타겟 컬럼이 충분한 데이터가 있는지 확인
         if len(df) < 5:
@@ -172,14 +172,14 @@ class ModelingService:
             if col in df.columns and col != target_column:
                 df = df.drop(columns=[col])
                 info['dropped_columns'].append(col)
-                print(f"📊 Removed wage-related column (data leakage prevention): {col}")
+                print(f"[DATA] Removed wage-related column (data leakage prevention): {col}")
         
         # 연도 컬럼 제거 (data_service에서 식별된 것 사용)
         if info['year_column'] and info['year_column'] in df.columns:
             if info['year_column'] != target_column:
                 df = df.drop(columns=[info['year_column']])
                 info['dropped_columns'].append(info['year_column'])
-                print(f"📊 Removed year column: {info['year_column']}")
+                print(f"[DATA] Removed year column: {info['year_column']}")
         else:
             # 백업: 수동으로 연도 컬럼 찾기
             year_columns = ['year', 'Year', 'YEAR', '년도', '연도', 'eng', 'kor']
@@ -187,7 +187,7 @@ class ModelingService:
                 if year_col in df.columns and year_col != target_column:
                     df = df.drop(columns=[year_col])
                     info['dropped_columns'].append(year_col)
-                    print(f"📊 Removed year column: {year_col}")
+                    print(f"[DATA] Removed year column: {year_col}")
         
         # 타겟 컬럼이 숫자형인지 확인
         try:
@@ -236,21 +236,21 @@ class ModelingService:
         
         try:
             # 데이터 체크 디버깅
-            print(f"📊 Before setup - Data shape: {ml_data.shape}")
-            print(f"📊 Data types: {ml_data.dtypes.value_counts()}")
+            print(f"[DATA] Before setup - Data shape: {ml_data.shape}")
+            print(f"[DATA] Data types: {ml_data.dtypes.value_counts()}")
             
             # 문제가 될 수 있는 값 체크 및 수정
             for col in ml_data.columns:
                 if pd.api.types.is_numeric_dtype(ml_data[col]):
                     # Infinity 값 처리
                     if ml_data[col].isin([np.inf, -np.inf]).any():
-                        print(f"⚠️ Column {col} contains infinity - replacing with NaN")
+                        print(f"[WARNING] Column {col} contains infinity - replacing with NaN")
                         ml_data[col] = ml_data[col].replace([np.inf, -np.inf], np.nan)
                     
                     # 매우 큰 값 스케일링 (백만 단위로 변환)
                     max_val = ml_data[col].max()
                     if pd.notna(max_val) and abs(max_val) > 1e7:
-                        print(f"📊 Column {col} has large values (max: {max_val:.2e}) - scaling down")
+                        print(f"[DATA] Column {col} has large values (max: {max_val:.2e}) - scaling down")
                         # 백만 단위로 스케일링
                         ml_data[col] = ml_data[col] / 1e6
                         print(f"  → Scaled to max: {ml_data[col].max():.2f}M")
@@ -400,7 +400,7 @@ class ModelingService:
             X_train = get_config('X_train')
             if X_train is not None:
                 self.feature_names = list(X_train.columns)
-                print(f"📊 Stored feature names: {len(self.feature_names)} features")
+                print(f"[DATA] Stored feature names: {len(self.feature_names)} features")
             
             self.model_results = {
                 'best_models': best_models,
@@ -600,9 +600,9 @@ class ModelingService:
             for old_file in old_model_files:
                 try:
                     os.remove(old_file)
-                    print(f"🗑️ Removed old model file: {os.path.basename(old_file)}")
+                    print(f"[CLEANUP] Removed old model file: {os.path.basename(old_file)}")
                 except Exception as e:
-                    print(f"⚠️ Could not remove {os.path.basename(old_file)}: {e}")
+                    print(f"[WARNING] Could not remove {os.path.basename(old_file)}: {e}")
 
             # 파일명 생성 (모델명_날짜시간.pkl)
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -621,11 +621,11 @@ class ModelingService:
             latest_path = os.path.join(models_dir, 'latest')
             save_model(self.current_model, latest_path, verbose=False)
 
-            print(f"✅ Model saved successfully: {filename}.pkl (old models removed)")
+            print(f"[OK] Model saved successfully: {filename}.pkl (old models removed)")
             return True
             
         except Exception as e:
-            print(f"❌ Failed to save model: {str(e)}")
+            print(f"[ERROR] Failed to save model: {str(e)}")
             return False
     
     def _load_latest_model_if_exists(self) -> bool:
@@ -640,14 +640,14 @@ class ModelingService:
             if os.path.exists(latest_path):
                 from pycaret.regression import load_model
                 self.current_model = load_model(os.path.join(models_dir, 'latest'))
-                print(f"✅ Latest model loaded automatically from {latest_path}")
+                print(f"[OK] Latest model loaded automatically from {latest_path}")
                 return True
             else:
-                print("ℹ️ No saved model found. Will create new model when training.")
+                print("[INFO] No saved model found. Will create new model when training.")
                 return False
-                
+
         except Exception as e:
-            print(f"⚠️ Could not load saved model: {str(e)}")
+            print(f"[WARNING] Could not load saved model: {str(e)}")
             return False
     
     def load_saved_model(self, filename: str = 'latest') -> Dict[str, Any]:

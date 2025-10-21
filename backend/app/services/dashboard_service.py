@@ -178,13 +178,13 @@ class DashboardService:
                 # 먼저 모델링 서비스에서 feature names 가져오기 (가장 정확함)
                 if hasattr(modeling_service, 'feature_names') and modeling_service.feature_names:
                     feature_columns = modeling_service.feature_names
-                    print(f"✅ Using feature names from modeling_service: {len(feature_columns)} features")
+                    print(f"[OK] Using feature names from modeling_service: {len(feature_columns)} features")
                 else:
                     # PyCaret config에서 직접 가져오기
                     X_train = get_config('X_train')
                     if X_train is not None:
                         feature_columns = list(X_train.columns)
-                        print(f"✅ Using feature names from PyCaret config: {len(feature_columns)} features")
+                        print(f"[OK] Using feature names from PyCaret config: {len(feature_columns)} features")
                     else:
                         raise ValueError("No training data available in PyCaret config. Please run model training first.")
             except Exception as e:
@@ -262,11 +262,11 @@ class DashboardService:
                         else:
                             input_data[col] = 0.0
             
-            print(f"📊 Model input prepared with {len(input_data)} features")
+            print(f"[DATA] Model input prepared with {len(input_data)} features")
             
             # 중요한 변수들의 값 로깅
             important_vars = ['labor_to_revenue_sbl', 'labor_cost_rate_sbl', 'cpi_kr', 'unemployment_rate_kr', 'wage_increase_bu_group']
-            print("🔍 중요 변수 값들:")
+            print("[SEARCH] 중요 변수 값들:")
             for var in important_vars:
                 if var in input_data:
                     original_val = input_data[var]
@@ -275,12 +275,12 @@ class DashboardService:
             
             # DataFrame 생성 시 컬럼 순서 보장
             result_df = pd.DataFrame([input_data], columns=feature_columns)
-            print(f"✅ DataFrame shape: {result_df.shape}, columns: {list(result_df.columns)[:5]}...")
+            print(f"[OK] DataFrame shape: {result_df.shape}, columns: {list(result_df.columns)[:5]}...")
             return result_df
                 
         except Exception as e:
             logging.error(f"Error preparing model input: {str(e)}")
-            print(f"❌ Error details: {e}")
+            print(f"[ERROR] Error details: {e}")
             
             # Cannot prepare model input without proper data
             raise ValueError(f"Cannot prepare model input data from provided variables: {str(e)}")
@@ -363,7 +363,7 @@ class DashboardService:
             
             # 데이터가 퍼센트로 저장되어 있는지 확인 (2.0 이상이면 퍼센트로 간주)
             if len(trend_data) > 0 and trend_data['performance_rate'].mean() > 0.5:
-                print(f"⚠️ Data appears to be in percentage format (mean: {trend_data['performance_rate'].mean():.2f})")
+                print(f"[WARNING] Data appears to be in percentage format (mean: {trend_data['performance_rate'].mean():.2f})")
                 # 퍼센트를 비율로 변환 (2.0% -> 0.02)
                 trend_data['performance_rate'] = trend_data['performance_rate'] / 100
                 print(f"   Converted to ratio format (new mean: {trend_data['performance_rate'].mean():.4f})")
@@ -387,7 +387,7 @@ class DashboardService:
             y = trend_data['performance_rate'].values
             
             # 디버깅: 실제 데이터 값 출력
-            print(f"📊 Performance rate data for regression:")
+            print(f"[DATA] Performance rate data for regression:")
             for i, row in trend_data.iterrows():
                 print(f"   Year {int(row['year'])}: {row['performance_rate']:.4f} ({row['performance_rate']*100:.2f}%)")
             
@@ -408,13 +408,13 @@ class DashboardService:
             
             print(f"   Raw prediction for 2026: {predicted_performance:.4f} ({predicted_performance*100:.2f}%)")
             
-            print(f"📊 Final Performance rate prediction for 2026: {predicted_performance:.3f} ({predicted_performance*100:.1f}%)")
+            print(f"[DATA] Final Performance rate prediction for 2026: {predicted_performance:.3f} ({predicted_performance*100:.1f}%)")
             print(f"   Based on {len(trend_data)} years of data from column '{available_col}'")
             
             return float(predicted_performance)
             
         except Exception as e:
-            print(f"⚠️ Error predicting performance trend: {e}")
+            print(f"[WARNING] Error predicting performance trend: {e}")
             # 오류 시 에러 발생
             raise
     
@@ -437,7 +437,7 @@ class DashboardService:
             # input_data가 없고 modeling_service에 2025년 데이터가 있으면 사용
             if not input_data and hasattr(modeling_service, 'prediction_data') and modeling_service.prediction_data is not None:
                 # 2025년 데이터 사용
-                print("📊 Using 2025 data from modeling service for 2026 prediction")
+                print("[DATA] Using 2025 data from modeling service for 2026 prediction")
                 model_input = modeling_service.prediction_data.iloc[[0]]  # 첫 번째 행만 사용
                 
                 # 데이터 누수 방지: 임금 관련 컬럼 모두 제거
@@ -491,24 +491,24 @@ class DashboardService:
             else:
                 prediction_value = raw_prediction
             
-            print(f"🔍 Debug - Raw model prediction: {raw_prediction:.4f} ({raw_prediction*100:.2f}%)")
-            print(f"🔍 Debug - Adjusted prediction (60% model + 40% trend): {prediction_value:.4f} ({prediction_value*100:.2f}%)")
-            print(f"🔍 Debug - Performance rate (from trend): {performance_rate:.4f} ({performance_rate*100:.2f}%)")
+            print(f"[SEARCH] Debug - Raw model prediction: {raw_prediction:.4f} ({raw_prediction*100:.2f}%)")
+            print(f"[SEARCH] Debug - Adjusted prediction (60% model + 40% trend): {prediction_value:.4f} ({prediction_value*100:.2f}%)")
+            print(f"[SEARCH] Debug - Performance rate (from trend): {performance_rate:.4f} ({performance_rate*100:.2f}%)")
             
             # Base-up = 총 인상률 - 성과 인상률
             base_up_rate = round(prediction_value - performance_rate, 4)
-            print(f"🔍 Debug - Base-up (total - performance): {base_up_rate:.4f} ({base_up_rate*100:.2f}%)")
+            print(f"[SEARCH] Debug - Base-up (total - performance): {base_up_rate:.4f} ({base_up_rate*100:.2f}%)")
             
             # Base-up이 음수인 경우 - 성과 인상률은 변경하지 않고 base_up만 조정
             if base_up_rate < 0:
-                print(f"⚠️ Debug - Base-up negative ({base_up_rate:.4f}), setting to 0")
+                print(f"[WARNING] Debug - Base-up negative ({base_up_rate:.4f}), setting to 0")
                 base_up_rate = 0
                 # 성과 인상률은 트렌드 예측값 그대로 유지
             
             # 성과 인상률이 총 예측값보다 큰 경우 - 성과 인상률은 유지하고 base_up을 0으로
             if performance_rate > prediction_value:
-                print(f"⚠️ Debug - Performance ({performance_rate:.4f}) > Total ({prediction_value:.4f})")
-                print(f"⚠️ Debug - Keeping performance rate as is, setting base_up to 0")
+                print(f"[WARNING] Debug - Performance ({performance_rate:.4f}) > Total ({prediction_value:.4f})")
+                print(f"[WARNING] Debug - Keeping performance rate as is, setting base_up to 0")
                 base_up_rate = 0
                 # 성과 인상률은 트렌드 예측값 그대로 유지
             
@@ -518,7 +518,7 @@ class DashboardService:
                 # 차이가 있으면 base_up_rate로 조정
                 base_up_rate = round(prediction_value - performance_rate, 4)
             
-            print(f"✅ Debug - FINAL VALUES:")
+            print(f"[OK] Debug - FINAL VALUES:")
             print(f"   Performance: {performance_rate:.4f} ({performance_rate*100:.2f}%)")
             print(f"   Base-up: {base_up_rate:.4f} ({base_up_rate*100:.2f}%)")
             print(f"   Total: {prediction_value:.4f} ({prediction_value*100:.2f}%)")
@@ -653,14 +653,14 @@ class DashboardService:
                     
                     # Feature Importance 순으로 정렬된 변수들이 있으면 반환
                     if variables:
-                        print(f"📊 Dashboard variables updated with top {len(variables)} features from importance")
+                        print(f"[DATA] Dashboard variables updated with top {len(variables)} features from importance")
                         return {
                             "variables": variables,
                             "current_values": current_values
                         }
         
         except Exception as e:
-            print(f"⚠️ Could not get feature importance for variables: {str(e)}")
+            print(f"[WARNING] Could not get feature importance for variables: {str(e)}")
         
         # Fallback: 기본 변수 정의 사용
         variables = []
@@ -842,10 +842,10 @@ class DashboardService:
                             df = pd.DataFrame(data)
                     else:
                         df = data
-                print(f"✅ Loaded original master_data from {master_data_path}")
+                print(f"[OK] Loaded original master_data from {master_data_path}")
             elif data_service.current_data is not None:
                 df = data_service.current_data.copy()
-                print("⚠️ Using current_data (may contain augmented data)")
+                print("[WARNING] Using current_data (may contain augmented data)")
             else:
                 df = None
             
@@ -932,7 +932,7 @@ class DashboardService:
                             
                             # 비정상적인 값 체크 (예: 100% 이상 또는 음수)
                             if abs(pred_value) > 1.0 or pred_value < 0:
-                                print(f"⚠️ Abnormal prediction value: {pred_value}")
+                                print(f"[WARNING] Abnormal prediction value: {pred_value}")
                                 raise ValueError("Abnormal prediction value")
                             
                             # 예측 결과를 퍼센트로 변환하여 추가
@@ -954,9 +954,9 @@ class DashboardService:
                                 }
                                 baseup_data.append(baseup_pred)
                             
-                            print(f"✅ Added 2026 prediction: Total={prediction_data['value']}%, Base-up={prediction_data['base_up']}%")
+                            print(f"[OK] Added 2026 prediction: Total={prediction_data['value']}%, Base-up={prediction_data['base_up']}%")
                         except Exception as e:
-                            print(f"⚠️ Could not generate prediction: {e}")
+                            print(f"[WARNING] Could not generate prediction: {e}")
                             # 오류 시에는 추가하지 않음 (중복 방지)
                             pass
                     
