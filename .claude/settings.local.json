@@ -61,7 +61,9 @@
       "Bash(done)",
       "Bash(git reset:*)",
       "Bash(git commit:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(./SambioWage.exe)",
+      "Bash(cmd //c \"robocopy C:\\Project\\2025_Wage_Prediction\\release\\win-unpacked D:\\SambioWage2025 /E /MT:8 /NFL /NDL /NJH /NJS\")"
     ],
     "deny": [],
     "ask": []
