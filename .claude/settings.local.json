@@ -59,7 +59,9 @@
       "Bash(for pid in 26916 26980 39856 19208 2984 35172 37496)",
       "Bash(do taskkill //F //PID $pid)",
       "Bash(done)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)"
     ],
     "deny": [],
     "ask": []
