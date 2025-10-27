@@ -7,23 +7,24 @@ import hashlib
 from datetime import datetime
 import pickle
 import logging
+from app.core.config import settings, UPLOAD_DIR, DATA_DIR
 
 class DataService:
     def __init__(self):
-        self.upload_dir = Path("uploads")
+        self.upload_dir = Path(UPLOAD_DIR)
         self.upload_dir.mkdir(exist_ok=True)
-        self.data_dir = Path("data")
+        self.data_dir = Path(DATA_DIR)
         self.data_dir.mkdir(exist_ok=True)
         self.pickle_file = self.data_dir / "master_data.pkl"  # 마스터 데이터
         self.working_pickle_file = self.data_dir / "working_data.pkl"  # 작업용 데이터
-        
+
         # 마스터 데이터와 작업 데이터 분리
         self.master_data: Optional[pd.DataFrame] = None  # 원본 마스터 데이터
         self.current_data: Optional[pd.DataFrame] = None  # 현재 작업 데이터
         self.data_info: Optional[Dict[str, Any]] = None
         self.column_mapping: Dict[str, str] = {}  # 영문 -> 한글 매핑
         self.reverse_column_mapping: Dict[str, str] = {}  # 한글 -> 영문 매핑
-        
+
         # 시작시 기본 데이터 로드 시도
         self._load_default_data()
     
