@@ -126,13 +126,7 @@ async def train_specific_model(request: ModelTrainingRequest) -> Dict[str, Any]:
             print(f"[WARNING] ExplainerDashboard update failed: {dashboard_error}")
             # Dashboard 오류가 있어도 모델 학습 결과는 반환
 
-        # 모델을 저장하고 자동 재로드 (다른 서비스들도 새 모델 사용하도록)
-        try:
-            modeling_service.save_current_model()
-            modeling_service._load_latest_model_if_exists()  # 모델 재로드
-            print("[INFO] Model saved and reloaded for all services")
-        except Exception as reload_error:
-            print(f"[WARNING] Model reload failed: {reload_error}")
+        # 모델은 이미 train_specific_model()에서 자동 저장됨
 
         return {
             **result,

@@ -133,143 +133,54 @@ export const Dashboard: React.FC = () => {
 
     try {
       console.log('Loading dashboard data from:', API_BASE_URL);
-      // Strategic API endpoints 사용 + 실제 모델의 Feature Importance
-      const [scenariosRes, historicalRes, sensitivityRes, featureRes, modelFeatureRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/strategic/scenarios`).then(r => r.json()).catch(err => { console.error('Scenarios error:', err); return { scenarios: [] }; }),
-        fetch(`${API_BASE_URL}/api/strategic/historical`).then(r => r.json()).catch(err => { console.error('Historical error:', err); return { data: [] }; }),
-        fetch(`${API_BASE_URL}/api/strategic/sensitivity`).then(r => r.json()).catch(err => { console.error('Sensitivity error:', err); return { analysis: [] }; }),
-        fetch(`${API_BASE_URL}/api/strategic/feature-importance`).then(r => r.json()).catch(err => { console.error('Feature importance error:', err); return { features: [] }; }),
-        fetch(`${API_BASE_URL}/api/dashboard/model-feature-importance`).then(r => r.json()).catch(err => { console.error('Model feature importance error:', err); return null; })
+      // Dashboard API endpoints 사용
+      const [templatesRes, variablesRes, indicatorsRes, trendRes, featureRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/dashboard/scenario-templates`).then(r => r.json()).catch(err => { console.error('Templates error:', err); return { templates: [] }; }),
+        fetch(`${API_BASE_URL}/api/dashboard/variables`).then(r => r.json()).catch(err => { console.error('Variables error:', err); return { variables: [], current_values: {} }; }),
+        fetch(`${API_BASE_URL}/api/dashboard/economic-indicators`).then(r => r.json()).catch(err => { console.error('Indicators error:', err); return { indicators: {} }; }),
+        fetch(`${API_BASE_URL}/api/dashboard/trend-data`).then(r => r.json()).catch(err => { console.error('Trend error:', err); return null; }),
+        fetch(`${API_BASE_URL}/api/dashboard/model-feature-importance`).then(r => r.json()).catch(err => { console.error('Feature importance error:', err); return null; })
       ]);
 
-      console.log('API responses:', { scenariosRes, historicalRes, sensitivityRes, featureRes, modelFeatureRes });
+      console.log('API responses:', { templatesRes, variablesRes, indicatorsRes, trendRes, featureRes });
 
-      // 시나리오 템플릿 형식으로 변환
-      const templates = scenariosRes.scenarios?.map((s: any) => ({
-        id: s.name.toLowerCase().replace(' ', '_'),
-        name: s.name,
-        description: s.description || '',
-        variables: s.variables || {}
-      })) || [];
-      setScenarioTemplates(templates);
+      // 시나리오 템플릿 설정
+      setScenarioTemplates(templatesRes.templates || []);
 
-      // Simple Regression 모델의 9개 조정 가능한 변수 (전년도 인상률 제외)
-      const variables = [
-        { name: 'minimum_wage', display_name: '최저임금 인상률', description: '최저임금 인상률', min_value: 0, max_value: 5, unit: '%', current_value: 1.7 },
-        { name: 'us_eci', display_name: '미국 임금비용지수', description: '미국 ECI', min_value: 2, max_value: 6, unit: '%', current_value: 3.9 },
-        { name: 'gdp_growth', display_name: 'GDP 성장률', description: 'GDP 성장률', min_value: 0, max_value: 4, unit: '%', current_value: 1.8 },
-        { name: 'revenue_growth', display_name: '매출액 증가율', description: '매출액 증가율', min_value: -5, max_value: 10, unit: '%', current_value: 3.0 },
-        { name: 'operating_margin', display_name: '영업이익률', description: '영업이익률', min_value: 0, max_value: 15, unit: '%', current_value: 5.5 },
-        { name: 'cpi', display_name: '소비자물가상승률', description: '소비자물가상승률', min_value: 0, max_value: 5, unit: '%', current_value: 1.9 },
-        { name: 'unemployment_rate', display_name: '실업률', description: '실업률', min_value: 2, max_value: 6, unit: '%', current_value: 3.8 },
-        { name: 'interest_rate', display_name: '시장금리', description: '시장금리', min_value: 1, max_value: 5, unit: '%', current_value: 2.75 },
-        { name: 'exchange_rate', display_name: '원달러환율', description: '원달러환율', min_value: 1000, max_value: 1500, unit: '원', current_value: 1350 }
-      ];
-      setAvailableVariables(variables);
+      // 변수 설정 (backend에서 가져온 변수 사용)
+      setAvailableVariables(variablesRes.variables || []);
 
       // 현재 값으로 customVariables 초기화
-      const currentValues = variables.reduce((acc, v) => ({ ...acc, [v.name]: v.current_value }), {});
+      const currentValues = variablesRes.current_values || {};
       setCustomVariables(currentValues);
 
       // 경제 지표 설정
-      setEconomicIndicators({
-        current_gdp_growth: {
-          value: 2.2,
-          change: '+0.3%',
-          status: 'stable',
-          last_updated: new Date().toISOString()
-        },
-        current_inflation: {
-          value: 1.8,
-          change: '-0.2%',
-          status: 'stable',
-          last_updated: new Date().toISOString()
-        },
-        current_unemployment: {
-          value: 3.5,
-          change: '+0.1%',
-          status: 'stable',
-          last_updated: new Date().toISOString()
-        }
-      });
+      setEconomicIndicators(indicatorsRes.indicators || {});
 
-      // Historical data를 트렌드 데이터로 변환
-      if (historicalRes.data && historicalRes.data.length > 0) {
-        const trendData = {
-          trend_data: historicalRes.data.map((d: any) => ({
-            year: d.year,
-            value: d.actual_increase * 100,
-            base_up: d.base_up ? d.base_up * 100 : null,
-            type: d.year === 2026 ? 'prediction' : 'actual'
-          }))
-        };
-        setTrendData(trendData);
-      }
+      // 트렌드 데이터 설정
+      setTrendData(trendRes);
 
-      // Feature importance 설정 (실제 모델 우선, 없으면 기본값)
-      if (modelFeatureRes && modelFeatureRes.feature_importance && modelFeatureRes.feature_importance.length > 0) {
-        // 실제 모델의 Feature Importance 사용
-        console.log('Using actual model feature importance');
-        setFeatureImportance(modelFeatureRes);
-      } else if (featureRes.features && featureRes.features.length > 0) {
-        // 전략적 대시보드의 기본값 사용
-        console.log('Using strategic default feature importance');
-        setFeatureImportance({
-          feature_importance: featureRes.features.map((f: any) => ({
-            feature: f.name,
-            feature_korean: f.korean_name || f.name,
-            importance: f.importance
-          }))
-        });
-      }
+      // Feature importance 설정
+      setFeatureImportance(featureRes);
+      console.log('Feature importance data:', featureRes);
 
       // 초기 예측 수행
       try {
         console.log('Making prediction with values:', currentValues);
-        console.log('API URL:', `${API_BASE_URL}/api/strategic/predict`);
-        const response = await fetch(`${API_BASE_URL}/api/strategic/predict`, {
+        console.log('API URL:', `${API_BASE_URL}/api/dashboard/predict`);
+        const response = await fetch(`${API_BASE_URL}/api/dashboard/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(currentValues)
+          body: JSON.stringify({
+            input_data: currentValues,
+            confidence_level: 0.95
+          })
         });
         const predictionRes = await response.json();
-        console.log('Strategic prediction result:', predictionRes);
+        console.log('Dashboard prediction result:', predictionRes);
 
-        // Strategic API 응답 형식에 맞게 변환 (result 안의 prediction 사용)
-        const result = predictionRes.result || predictionRes;
-        const prediction = result.prediction || {};
-
-        const formattedPrediction: PredictionResult = {
-          prediction: (prediction.total || 0) / 100,  // 4.0% -> 0.04
-          base_up_rate: ((prediction.total || 0) / 100) - 0.021,  // 총인상률 - 성과인상률(2.1%)
-          performance_rate: 0.021,  // 2.1%로 고정
-          confidence_interval: [
-            ((prediction.total || 0) - 0.5) / 100,
-            ((prediction.total || 0) + 0.5) / 100
-          ] as [number, number],
-          confidence_level: result.confidence?.overall || 0.85,
-          input_variables: currentValues,
-          breakdown: {
-            base_up: {
-              rate: ((prediction.total || 0) / 100) - 0.021,  // 총인상률 - 성과인상률(2.1%)
-              percentage: (prediction.total || 0) - 2.1,
-              description: 'Base-up 인상률',
-              calculation: ''
-            },
-            performance: {
-              rate: 0.021,  // 2.1%로 고정
-              percentage: 2.1,
-              description: '성과급 인상률',
-              calculation: ''
-            },
-            total: {
-              rate: (prediction.total || 0) / 100,
-              percentage: prediction.total || 0,
-              description: '총 인상률'
-            }
-          }
-        };
-        setCurrentPrediction(formattedPrediction);
+        // Dashboard API 응답은 이미 PredictionResult 형식
+        setCurrentPrediction(predictionRes);
       } catch (predError) {
         console.error('Strategic prediction failed:', predError);
       }
@@ -292,7 +203,7 @@ export const Dashboard: React.FC = () => {
 
       try {
         // Strategic predict endpoint 사용
-        const response = await fetch(`${API_BASE_URL}/api/strategic/predict`, {
+        const response = await fetch(`${API_BASE_URL}/api/dashboard/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(template.variables)
@@ -368,7 +279,7 @@ export const Dashboard: React.FC = () => {
       const variablesToUse = variables || customVariables;
 
       // Simple Regression predict endpoint 사용
-      const response = await fetch(`${API_BASE_URL}/api/strategic/predict`, {
+      const response = await fetch(`${API_BASE_URL}/api/dashboard/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -432,7 +343,7 @@ export const Dashboard: React.FC = () => {
 
     try {
       // Strategic scenarios endpoint 사용
-      const response = await fetch(`${API_BASE_URL}/api/strategic/scenarios`);
+      const response = await fetch(`${API_BASE_URL}/api/dashboard/scenario-templates`);
       const scenariosRes = await response.json();
 
       const results = scenariosRes.scenarios?.map((scenario: any, index: number) => ({

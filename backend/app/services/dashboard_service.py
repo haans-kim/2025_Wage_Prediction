@@ -169,98 +169,46 @@ class DashboardService:
     def _prepare_model_input(self, variables: Dict[str, float]) -> pd.DataFrame:
         """모델 입력용 데이터 준비 - PyCaret 모델에 맞게 수정"""
         try:
-            # PyCaret 모델의 feature names 가져오기
-            from app.services.modeling_service import modeling_service
-            from pycaret.regression import get_config
-            
-            # PyCaret 설정에서 feature 정보 가져오기
-            try:
-                # 먼저 모델링 서비스에서 feature names 가져오기 (가장 정확함)
-                if hasattr(modeling_service, 'feature_names') and modeling_service.feature_names:
-                    feature_columns = modeling_service.feature_names
-                    print(f"[OK] Using feature names from modeling_service: {len(feature_columns)} features")
-                else:
-                    # PyCaret config에서 직접 가져오기
-                    X_train = get_config('X_train')
-                    if X_train is not None:
-                        feature_columns = list(X_train.columns)
-                        print(f"[OK] Using feature names from PyCaret config: {len(feature_columns)} features")
-                    else:
-                        raise ValueError("No training data available in PyCaret config. Please run model training first.")
-            except Exception as e:
-                print(f"Warning: Could not get PyCaret config: {e}")
-                raise ValueError("Dashboard requires a trained PyCaret model with proper configuration. Please run model training first.")
-            
-            # 변수 매핑: Dashboard 변수 → 실제 데이터 컬럼
-            # 영향요인 분석 결과 기반으로 가장 중요한 변수들 매핑
-            variable_mapping = {
-                # 기존 변수들
-                'wage_increase_bu_group': ('wage_increase_bu_group', 0.01),  # 3.0% → 0.03
-                'gdp_growth': ('gdp_growth_kr', 0.01),      # 2.8% → 0.028
-                'unemployment_rate': ('unemployment_rate_kr', 0.01),  # 3.2% → 0.032
-                'market_size_growth_rate': ('market_size_growth_rate', 0.01),  # 5.0% → 0.05
-                'hcroi_sbl': ('hcroi_sbl', 1.0),  # 1.5배 → 1.5 (비율이므로 그대로)
-                # 상위 Feature Importance 변수들 추가 (실제 feature 이름으로 수정)
-                'labor_cost_rate_sbl': ('labor_to_revenue_sbl', 0.01),  # 25.0% → 0.25 (실제는 labor_to_revenue_sbl)
-                'cpi_kr': ('cpi_kr', 0.01),  # 2.5% → 0.025
-                'labor_cost_ratio_change_sbl': ('labor_cost_ratio_change_sbl', 0.01),  # 0.0%p → 0.00
-                'labor_cost_per_employee_sbl': ('labor_cost_per_employee_sbl', 100000000),  # 100억원 → 100억원 (실제 단위)
-                'eci_usa': ('eci_usa', 0.01),  # 3.0% → 0.03
-                # 콘솔 데이터 기준 추가 매핑
-                'op_profit_growth_sbl': ('op_profit_growth_sbl', 0.01),  # 영업이익 증가율
-                'unemployment_rate_us': ('unemployment_rate_us', 0.01),  # 미국 실업률  
-                'wage_increase_bu_sbl': ('wage_increase_bu_sbl', 0.01)   # SBL Base-up 인상률
-            }
-            
-            # 데이터에서 수치형 값들의 평균값 계산 (결측값과 '-' 제외)
-            df_clean = None
-            if data_service.current_data is not None:
-                df_clean = data_service.current_data.copy()
-                for col in df_clean.columns:
-                    if df_clean[col].dtype == 'object':  # 문자열 컬럼
-                        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
-            
+            # hwaseung 방식: 데이터에서 직접 feature columns 가져오기
+            from app.services.data_service import data_service
+
+            if data_service.current_data is None:
+                raise ValueError("No data available for prediction")
+
+            # 모든 컬럼에서 target 컬럼(SBL 임금) 제외
+            # wage_increase_*_group은 feature로 사용 (그룹사 임금 정보)
+            # wage_increase_*_sbl은 target (예측 대상)
+            all_columns = list(data_service.current_data.columns)
+            exclude_columns = [
+                'wage_increase_total_sbl', 'wage_increase_mi_sbl', 'wage_increase_bu_sbl',  # Target columns
+                'wage_increase_baseup_sbl', 'Base-up 인상률', '성과인상률', '임금인상률',
+                'eng', 'year', 'Year'  # 연도 컬럼도 제외
+            ]
+            feature_columns = [col for col in all_columns if col not in exclude_columns]
+            print(f"[OK] Using actual data columns: {len(feature_columns)} features")
+            print(f"[DATA] All columns in current_data: {all_columns}")
+            print(f"[DATA] Feature columns: {feature_columns}")
+            print(f"[CHECK] wage_increase_mi_group in features: {'wage_increase_mi_group' in feature_columns}")
+            print(f"[CHECK] wage_increase_total_group in features: {'wage_increase_total_group' in feature_columns}")
+
+            # 실제 데이터에서 최신값 가져오기
+            df = data_service.current_data.copy()
+            latest_row = df.iloc[-1]  # 최신 데이터 (2024년)
+
             input_data = {}
-            
+
             for col in feature_columns:
-                # 매핑된 변수가 있으면 사용자 입력값 적용
-                mapped_variable = None
-                scale_factor = 1.0
-                
-                for dash_var, (data_col, scale) in variable_mapping.items():
-                    if data_col == col and dash_var in variables:
-                        mapped_variable = dash_var
-                        scale_factor = scale
-                        break
-                
-                if mapped_variable:
-                    input_data[col] = variables[mapped_variable] * scale_factor
+                if col in variables:
+                    # 사용자가 조정한 변수 사용 (변수명이 실제 컬럼명과 일치하는 경우)
+                    input_data[col] = variables[col]
+                    print(f"  [USER] Using user input for {col}: {variables[col]}")
                 else:
-                    # 해당 컬럼의 평균값 사용 (결측값 제외)
-                    if df_clean is not None and col in df_clean.columns:
-                        col_mean = df_clean[col].mean()
-                        if pd.notna(col_mean):
-                            input_data[col] = col_mean
-                        else:
-                            # 컬럼별 기본값 설정
-                            if 'wage' in col or 'increase' in col:
-                                input_data[col] = 0.03  # 임금 관련은 3%
-                            elif 'growth' in col:
-                                input_data[col] = 0.02  # 성장률 관련은 2%
-                            elif 'rate' in col or 'ratio' in col:
-                                input_data[col] = 0.1  # 비율 관련은 10%
-                            else:
-                                input_data[col] = 0.0
+                    # 최신 데이터값 사용
+                    value = pd.to_numeric(latest_row[col], errors='coerce')
+                    if pd.notna(value):
+                        input_data[col] = value
                     else:
-                        # 컬럼별 기본값 설정
-                        if 'wage' in col or 'increase' in col:
-                            input_data[col] = 0.03
-                        elif 'growth' in col:
-                            input_data[col] = 0.02
-                        elif 'rate' in col or 'ratio' in col:
-                            input_data[col] = 0.1
-                        else:
-                            input_data[col] = 0.0
+                        input_data[col] = 0.0
             
             print(f"[DATA] Model input prepared with {len(input_data)} features")
             
@@ -275,7 +223,8 @@ class DashboardService:
             
             # DataFrame 생성 시 컬럼 순서 보장
             result_df = pd.DataFrame([input_data], columns=feature_columns)
-            print(f"[OK] DataFrame shape: {result_df.shape}, columns: {list(result_df.columns)[:5]}...")
+            print(f"[OK] DataFrame shape: {result_df.shape}")
+            print(f"[OK] Sample values: {dict(list(result_df.iloc[0].items())[:5])}")
             return result_df
                 
         except Exception as e:
@@ -434,22 +383,8 @@ class DashboardService:
             # ModelingService에서 2025년 데이터 확인
             from app.services.modeling_service import modeling_service
             
-            # input_data가 없고 modeling_service에 2025년 데이터가 있으면 사용
-            if not input_data and hasattr(modeling_service, 'prediction_data') and modeling_service.prediction_data is not None:
-                # 2025년 데이터 사용
-                print("[DATA] Using 2025 data from modeling service for 2026 prediction")
-                model_input = modeling_service.prediction_data.iloc[[0]]  # 첫 번째 행만 사용
-                
-                # 데이터 누수 방지: 임금 관련 컬럼 모두 제거
-                wage_columns_to_remove = [
-                    'wage_increase_total_sbl', 'wage_increase_mi_sbl', 'wage_increase_bu_sbl',
-                    'wage_increase_baseup_sbl', 'Base-up 인상률', '성과인상률', '임금인상률',
-                    'wage_increase_total_group', 'wage_increase_mi_group', 'wage_increase_bu_group'
-                ]
-                model_input = model_input.drop(columns=wage_columns_to_remove, errors='ignore')
-            else:
-                # 입력 데이터 준비
-                model_input = self._prepare_model_input(input_data)
+            # 입력 데이터 준비
+            model_input = self._prepare_model_input(input_data)
             
             # PyCaret의 predict_model 사용
             try:
@@ -468,17 +403,22 @@ class DashboardService:
                 # 폴백: 직접 예측 시도
                 prediction = model.predict(model_input)[0]
             
-            # 과거 10개년 성과 인상률 데이터를 기반으로 선형회귀 예측
-            performance_rate = self._predict_performance_trend()
-            
+            # 과거 성과 인상률 트렌드 기반 예측
+            try:
+                performance_rate = self._predict_performance_trend()
+                performance_rate = round(performance_rate, 4)
+            except Exception as e:
+                print(f"[WARNING] Performance trend prediction failed: {e}")
+                # 기본값: 총 인상률의 40% 정도
+                performance_rate = round(float(prediction) * 0.4, 4)
+
             # 반올림 처리를 위해 소수점 4자리까지만 유지
             raw_prediction = round(float(prediction), 4)
-            performance_rate = round(performance_rate, 4)
-            
+
             # 최근 트렌드 반영한 조정
             # 최근 2년이 5.3%, 5.6%로 높은 인상률을 보임
             from app.services.data_service import data_service
-            
+
             # 그룹 Base-up의 논리적 영향 반영
             # 그룹 Base-up이 높으면 SBL 임금도 높아야 함 (상식적 관계)
             if isinstance(input_data, dict) and 'wage_increase_bu_group' in input_data:
@@ -490,35 +430,35 @@ class DashboardService:
                 prediction_value = round(raw_prediction + logical_adjustment, 4)
             else:
                 prediction_value = raw_prediction
-            
-            print(f"[SEARCH] Debug - Raw model prediction: {raw_prediction:.4f} ({raw_prediction*100:.2f}%)")
-            print(f"[SEARCH] Debug - Adjusted prediction (60% model + 40% trend): {prediction_value:.4f} ({prediction_value*100:.2f}%)")
-            print(f"[SEARCH] Debug - Performance rate (from trend): {performance_rate:.4f} ({performance_rate*100:.2f}%)")
-            
+
+            print(f"[DEBUG] Raw model prediction: {raw_prediction:.4f} ({raw_prediction*100:.2f}%)")
+            print(f"[DEBUG] Adjusted prediction: {prediction_value:.4f} ({prediction_value*100:.2f}%)")
+            print(f"[DEBUG] Performance rate (from trend): {performance_rate:.4f} ({performance_rate*100:.2f}%)")
+
             # Base-up = 총 인상률 - 성과 인상률
             base_up_rate = round(prediction_value - performance_rate, 4)
-            print(f"[SEARCH] Debug - Base-up (total - performance): {base_up_rate:.4f} ({base_up_rate*100:.2f}%)")
-            
+            print(f"[DEBUG] Base-up (total - performance): {base_up_rate:.4f} ({base_up_rate*100:.2f}%)")
+
             # Base-up이 음수인 경우 - 성과 인상률은 변경하지 않고 base_up만 조정
             if base_up_rate < 0:
-                print(f"[WARNING] Debug - Base-up negative ({base_up_rate:.4f}), setting to 0")
-                base_up_rate = 0
+                print(f"[WARNING] Base-up negative ({base_up_rate:.4f}), setting to 0")
+                base_up_rate = 0.0
                 # 성과 인상률은 트렌드 예측값 그대로 유지
-            
+
             # 성과 인상률이 총 예측값보다 큰 경우 - 성과 인상률은 유지하고 base_up을 0으로
             if performance_rate > prediction_value:
-                print(f"[WARNING] Debug - Performance ({performance_rate:.4f}) > Total ({prediction_value:.4f})")
-                print(f"[WARNING] Debug - Keeping performance rate as is, setting base_up to 0")
-                base_up_rate = 0
+                print(f"[WARNING] Performance ({performance_rate:.4f}) > Total ({prediction_value:.4f})")
+                print(f"[WARNING] Keeping performance rate as is, setting base_up to 0")
+                base_up_rate = 0.0
                 # 성과 인상률은 트렌드 예측값 그대로 유지
-            
+
             # 최종 검증: 합계가 총 예측값과 일치하도록 조정
             calculated_total = round(base_up_rate + performance_rate, 4)
             if abs(calculated_total - prediction_value) > 0.0001:
                 # 차이가 있으면 base_up_rate로 조정
                 base_up_rate = round(prediction_value - performance_rate, 4)
-            
-            print(f"[OK] Debug - FINAL VALUES:")
+
+            print(f"[OK] FINAL VALUES:")
             print(f"   Performance: {performance_rate:.4f} ({performance_rate*100:.2f}%)")
             print(f"   Base-up: {base_up_rate:.4f} ({base_up_rate*100:.2f}%)")
             print(f"   Total: {prediction_value:.4f} ({prediction_value*100:.2f}%)")
@@ -570,21 +510,21 @@ class DashboardService:
                 "breakdown": {
                     "base_up": {
                         "rate": base_up_rate,
-                        "percentage": round(base_up_rate * 100, 1),  # 소수점 첫째자리
+                        "percentage": round(base_up_rate * 100, 2),
                         "description": "기본 인상분",
                         "calculation": "총 인상률 - 성과 인상률"
                     },
                     "performance": {
                         "rate": performance_rate,
-                        "percentage": round(performance_rate * 100, 1),  # 소수점 첫째자리
+                        "percentage": round(performance_rate * 100, 2),
                         "description": "과거 10년 성과급 추세 기반 예측",
                         "calculation": "선형회귀 분석으로 예측"
                     },
                     "total": {
                         "rate": prediction_value,
-                        "percentage": round(prediction_value * 100, 1),  # 소수점 첫째자리
+                        "percentage": round(prediction_value * 100, 2),
                         "description": "2026년 총 임금 인상률 예측",
-                        "verification": f"{round(base_up_rate * 100, 1)}% + {round(performance_rate * 100, 1)}% = {round(prediction_value * 100, 1)}%"
+                        "verification": f"{round(base_up_rate * 100, 2)}% + {round(performance_rate * 100, 2)}% = {round(prediction_value * 100, 2)}%"
                     }
                 }
             }

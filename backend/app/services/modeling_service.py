@@ -71,8 +71,8 @@ class ModelingService:
                 'cv_folds': 2 if data_size < 15 else 3,  # 매우 작은 데이터는 2-fold
                 'models': self.small_data_models,
                 'normalize': True,  # 작은 데이터도 정규화 적용
-                'transformation': True,  # 작은 데이터도 변환 적용
-                'remove_outliers': True,  # 작은 데이터도 이상치 제거
+                'transformation': False,  # wage_increase_*_group 컬럼 보존을 위해 비활성화
+                'remove_outliers': False,  # wage_increase_*_group 컬럼 보존을 위해 비활성화
                 'feature_selection': False,  # GBR 사용으로 특성 선택 불필요
                 'n_features_to_select': 0.8
             }
@@ -132,18 +132,11 @@ class ModelingService:
         if target_column not in df.columns:
             raise ValueError(f"Target column '{target_column}' not found in data")
         
-        # 2025년 데이터(예측 대상) 분리 저장
+        # 타겟 컬럼에 결측값이 있는 행 분리 (2025년 예측 대상 데이터)
         prediction_data_mask = df[target_column].isna()
-        if prediction_data_mask.any():
-            self.prediction_data = df[prediction_data_mask].copy()
-            self.prediction_features = model_config.get('feature_columns', [])
-            print(f"[DATA] Separated {len(self.prediction_data)} rows for 2026 prediction (2025 data with no target)")
-        else:
-            self.prediction_data = None
-            self.prediction_features = []
-        
-        # 타겟 컬럼에 결측값이 있는 행 제거 (2025년 예측 대상 데이터 제외)
         initial_rows = len(df)
+
+        # 학습 데이터: 타겟이 있는 행만
         df = df.dropna(subset=[target_column])
         removed_rows = initial_rows - len(df)
         
@@ -275,7 +268,7 @@ class ModelingService:
                     'transformation_method': 'yeo-johnson' if optimal_settings['transformation'] else None,
                     'remove_outliers': optimal_settings['remove_outliers'],
                     'outliers_threshold': 0.05 if optimal_settings['remove_outliers'] else None,
-                    'remove_multicollinearity': True,
+                    'remove_multicollinearity': False,  # wage_increase_*_group 컬럼 유지를 위해 비활성화
                     'multicollinearity_threshold': 0.9,
                     'feature_selection': optimal_settings['feature_selection']
                 }
@@ -325,7 +318,21 @@ class ModelingService:
             
             self.current_experiment = exp
             self.is_setup_complete = True
-            
+
+            # PyCaret이 제거한 컬럼 확인
+            try:
+                from pycaret.regression import get_config
+                X_train = get_config('X_train')
+                if X_train is not None:
+                    feature_cols_after = list(X_train.columns)
+                    feature_cols_before = [col for col in ml_data.columns if col != target_column]
+                    removed_cols = set(feature_cols_before) - set(feature_cols_after)
+                    if removed_cols:
+                        print(f"[PYCARET] Removed columns during setup: {removed_cols}")
+                    print(f"[PYCARET] Final features ({len(feature_cols_after)}): {feature_cols_after}")
+            except Exception as debug_e:
+                print(f"[DEBUG] Could not get PyCaret feature info: {debug_e}")
+
         except Exception as e:
             raise RuntimeError(f"PyCaret setup failed: {str(e)}")
         finally:
@@ -474,16 +481,16 @@ class ModelingService:
                 final_model = tuned_model
             
             self.current_model = final_model
-            
-            # 모델 자동 저장
-            self._save_model(model_name)
-            
+
         except Exception as e:
             raise RuntimeError(f"Model training failed: {str(e)}")
         finally:
             # 출력 복원
             sys.stdout = old_stdout
             sys.stderr = old_stderr
+
+        # 모델 자동 저장 (stdout 복원 후 수행)
+        self._save_model(model_name)
         
         return {
             'message': f'Model {model_name} trained and saved successfully',
@@ -569,6 +576,38 @@ class ModelingService:
             'evaluation_metrics': prediction_results.to_dict() if prediction_results is not None else None
         }
     
+
+    def predict_2026_wage(self, data_row: 'pd.DataFrame') -> float:
+        """
+        2026년 임금 예측 (PyCaret setup 상태 유지)
+        
+        Args:
+            data_row: 예측할 데이터 행 (target 컬럼 제외)
+            
+        Returns:
+            예측된 임금인상률
+        """
+        if self.current_model is None:
+            raise RuntimeError("No trained model available")
+        
+        if not self.is_setup_complete:
+            raise RuntimeError("PyCaret setup not complete. Cannot use predict_model.")
+        
+        try:
+            old_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+            
+            from pycaret.regression import predict_model
+            predictions = predict_model(self.current_model, data=data_row)
+            prediction_value = float(predictions['prediction_label'].iloc[0])
+            
+            return prediction_value
+            
+        except Exception as e:
+            raise RuntimeError(f"Prediction failed: {str(e)}")
+        finally:
+            sys.stdout = old_stdout
+
     def get_modeling_status(self) -> Dict[str, Any]:
         """현재 모델링 상태 반환"""
         return {
