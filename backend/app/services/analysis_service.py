@@ -149,7 +149,7 @@ class AnalysisService:
         # 캐시에서 결과 확인
         if cache_key in self._shap_cache and sample_index is None:
             cached_result = self._shap_cache[cache_key]
-            print(f"📊 Using cached SHAP analysis for model {model_id}")
+            print(f" Using cached SHAP analysis for model {model_id}")
             return cached_result
         
         try:
@@ -175,7 +175,7 @@ class AnalysisService:
                 # 데이터 정리 (NaN, inf 처리)
                 X_train_array = np.nan_to_num(X_train_array, nan=0.0, posinf=1e6, neginf=-1e6)
                 
-                print(f"📊 SHAP Analysis: {len(self.feature_names)} features after preprocessing")
+                print(f"[SHAP] Analysis: {len(self.feature_names)} features after preprocessing")
             
             # SHAP explainer 생성 (안전한 방식으로 수정)
             model_name = type(model).__name__.lower()
@@ -210,7 +210,7 @@ class AnalysisService:
                     shap_values = explainer.shap_values(analysis_sample)
                     
             except Exception as e:
-                print(f"⚠️ SHAP TreeExplainer failed, using KernelExplainer: {e}")
+                print(f"[WARN] SHAP TreeExplainer failed, using KernelExplainer: {e}")
                 # 완전한 fallback - 모델을 래핑해서 feature_names_in_ 문제 해결
                 try:
                     # 모델 예측 함수를 안전하게 래핑 (PyCaret용)
@@ -220,7 +220,7 @@ class AnalysisService:
                             if hasattr(X, 'shape') and len(X.shape) == 2:
                                 X_df = pd.DataFrame(X, columns=self.feature_names)
                                 predictions = model.predict(X_df)
-                                print(f"✅ SHAP predictions: shape={predictions.shape}, sample values={predictions[:3]}")
+                                print(f"[OK] SHAP predictions: shape={predictions.shape}, sample values={predictions[:3]}")
                                 return predictions
                             else:
                                 # 1차원 배열인 경우
@@ -229,7 +229,7 @@ class AnalysisService:
                                 predictions = model.predict(X_df)
                                 return predictions
                         except Exception as e:
-                            print(f"⚠️ SHAP safe_predict failed: {e}")
+                            print(f"[WARN] SHAP safe_predict failed: {e}")
                             # 실제 예측값의 평균으로 fallback
                             try:
                                 avg_pred = y_train.mean() if y_train is not None else 0.042
@@ -251,7 +251,7 @@ class AnalysisService:
                     shap_values = explainer.shap_values(analysis_sample)
                     
                 except Exception as inner_e:
-                    print(f"⚠️ KernelExplainer also failed: {inner_e}")
+                    print(f"[WARN] KernelExplainer also failed: {inner_e}")
                     # 마지막 fallback: 기본 feature importance 사용
                     if hasattr(model, 'feature_importances_'):
                         importance_scores = model.feature_importances_
@@ -262,7 +262,7 @@ class AnalysisService:
                         # 평균 0.01, 표준편차 0.005의 정규분포로 생성
                         np.random.seed(42)
                         shap_values = np.random.normal(0.01, 0.005, (min(5, len(analysis_data)), num_features))
-                        print(f"⚠️ Using fallback SHAP values with shape: {shap_values.shape}")
+                        print(f"[WARN] Using fallback SHAP values with shape: {shap_values.shape}")
             
             # Feature importance 계산
             if isinstance(shap_values, np.ndarray):
@@ -270,13 +270,13 @@ class AnalysisService:
                     importance_scores = np.abs(shap_values).mean(axis=0)
                 else:
                     importance_scores = np.abs(shap_values)
-                print(f"📊 Importance scores: shape={importance_scores.shape}, values={importance_scores[:5]}")
+                print(f" Importance scores: shape={importance_scores.shape}, values={importance_scores[:5]}")
             else:
                 importance_scores = np.abs(shap_values[0]).mean(axis=0) if len(shap_values) > 0 else []
             
             # 값이 모두 0인지 확인하고 실제 모델에서 importance 추출
             if np.all(importance_scores == 0):
-                print("⚠️ All SHAP scores are zero, trying to extract from model directly")
+                print("[WARN] All SHAP scores are zero, trying to extract from model directly")
 
                 # 모델에서 직접 feature importance 추출 시도
                 try:
@@ -288,14 +288,14 @@ class AnalysisService:
                     # Linear 모델의 경우 계수 사용
                     if hasattr(actual_model, 'coef_'):
                         importance_scores = np.abs(actual_model.coef_)
-                        print(f"✅ Using linear model coefficients as importance scores")
+                        print(f"[OK] Using linear model coefficients as importance scores")
                     # Tree 기반 모델의 경우 feature_importances_ 사용
                     elif hasattr(actual_model, 'feature_importances_'):
                         importance_scores = actual_model.feature_importances_
-                        print(f"✅ Using tree model feature importances")
+                        print(f"[OK] Using tree model feature importances")
                     else:
                         # 최후의 수단: Permutation importance 계산
-                        print("⚠️ Trying permutation importance as last resort")
+                        print("[WARN] Trying permutation importance as last resort")
                         from sklearn.inspection import permutation_importance
 
                         # 작은 데이터셋이므로 적은 반복 횟수 사용
@@ -304,13 +304,13 @@ class AnalysisService:
                             n_repeats=5, random_state=42
                         )
                         importance_scores = perm_imp.importances_mean
-                        print(f"✅ Using permutation importance scores")
+                        print(f"[OK] Using permutation importance scores")
 
                 except Exception as e:
-                    print(f"⚠️ Failed to extract importance from model: {e}")
+                    print(f"[WARN] Failed to extract importance from model: {e}")
                     # 마지막 fallback: 균등한 중요도 부여
                     importance_scores = np.ones(len(self.feature_names)) / len(self.feature_names)
-                    print("⚠️ Using uniform importance as final fallback")
+                    print("[WARN] Using uniform importance as final fallback")
             
             # Top N features
             feature_importance = []
@@ -353,7 +353,7 @@ class AnalysisService:
             # 캐시에 저장 (sample_index가 없을 때만)
             if sample_index is None:
                 self._shap_cache[cache_key] = result
-                print(f"📊 Cached SHAP analysis for model {model_id}")
+                print(f" Cached SHAP analysis for model {model_id}")
             
             return result
             
@@ -366,15 +366,15 @@ class AnalysisService:
     
     def get_feature_importance(self, model, method: str = "shap", top_n: int = 15) -> Dict[str, Any]:
         """Feature importance 분석"""
-        
+
         # 캐시 키 생성
         model_id = id(model)
         cache_key = f"{model_id}_{method}_{top_n}"
-        
+
         # 캐시에서 결과 확인
         if cache_key in self._importance_cache:
             cached_result = self._importance_cache[cache_key]
-            print(f"📊 Using cached {method} importance for model {model_id}")
+            print(f"[CACHE] Using cached {method} importance for model {model_id}")
             return cached_result
         
         try:
@@ -469,7 +469,7 @@ class AnalysisService:
                     return result
                     
                 except Exception as e:
-                    print(f"⚠️ PyCaret method failed: {str(e)}")
+                    print(f"[WARN] PyCaret method failed: {str(e)}")
                     
             elif method == "permutation" and SKLEARN_AVAILABLE:
                 # Permutation importance
@@ -481,7 +481,7 @@ class AnalysisService:
                     if hasattr(model, 'steps'):
                         # Pipeline의 마지막 단계(실제 모델) 추출
                         actual_model = model.steps[-1][1]
-                        print(f"📊 Using actual model from Pipeline: {type(actual_model).__name__}")
+                        print(f" Using actual model from Pipeline: {type(actual_model).__name__}")
                         
                         # Pipeline 전체로 예측하되, feature importance는 실제 모델에서 추출
                         if hasattr(actual_model, 'coef_'):
@@ -535,7 +535,7 @@ class AnalysisService:
                     perm_importance = permutation_importance(model, test_X, test_y, n_repeats=10, random_state=42)
                     
                 except Exception as e:
-                    print(f"⚠️ Feature importance calculation failed: {str(e)}")
+                    print(f"[WARN] Feature importance calculation failed: {str(e)}")
                     # Fallback: 기본값 반환
                     return {
                         "method": method,
@@ -585,7 +585,7 @@ class AnalysisService:
             
             # 캐시에 저장
             self._importance_cache[cache_key] = result
-            print(f"📊 Cached {method} importance for model {model_id}")
+            print(f" Cached {method} importance for model {model_id}")
             
             return result
             
@@ -612,7 +612,7 @@ class AnalysisService:
             if X_train is None:
                 raise ValueError("No training data available")
             
-            print(f"📊 LIME Analysis Debug:")
+            print(f" LIME Analysis Debug:")
             print(f"   - X_train type: {type(X_train)}")
             print(f"   - X_train shape: {X_train.shape}")
             if hasattr(X_train, 'columns'):
@@ -628,7 +628,7 @@ class AnalysisService:
                 feature_names = X_train.columns.tolist()
                 # 한글 컬럼명 매핑 가져오기
                 self.feature_display_names = data_service.get_display_names(feature_names)
-                print(f"📊 LIME using features: {feature_names[:5]}... (총 {len(feature_names)}개)")
+                print(f" LIME using features: {feature_names[:5]}... (총 {len(feature_names)}개)")
             else:
                 train_data = X_train
                 feature_names = [f"feature_{i}" for i in range(X_train.shape[1])]
@@ -657,7 +657,7 @@ class AnalysisService:
                             X = pd.DataFrame(X, columns=self.feature_names)
                         return self.model.predict(X)
                     except Exception as e:
-                        print(f"⚠️ WrappedModel prediction error: {e}")
+                        print(f"[WARN] WrappedModel prediction error: {e}")
                         # fallback
                         n_samples = len(X) if hasattr(X, '__len__') else 1
                         return np.full(n_samples, 0.042)  # 평균값으로 대체
@@ -689,14 +689,14 @@ class AnalysisService:
             instance = test_data[sample_index]
             instance = np.nan_to_num(instance, nan=0.0, posinf=1e6, neginf=-1e6)
             
-            print(f"📊 LIME instance debug:")
+            print(f" LIME instance debug:")
             print(f"   - Instance shape: {instance.shape}")
             print(f"   - Instance type: {type(instance)}")
             print(f"   - Feature names length: {len(feature_names)}")
             print(f"   - Instance values sample: {instance[:3]}")
             
             # LIME 설명 생성을 위한 완전히 독립적인 예측 함수
-            print(f"📊 Creating LIME explainer with:")
+            print(f" Creating LIME explainer with:")
             print(f"   - Training data shape: {train_data_clean.shape}")
             print(f"   - Feature names: {feature_names}")
             print(f"   - Instance to explain shape: {instance.shape}")
@@ -709,14 +709,14 @@ class AnalysisService:
                     if hasattr(X, 'shape'):
                         if len(X.shape) == 1:
                             X = X.reshape(1, -1)
-                        print(f"📊 LIME internal predict - X shape: {X.shape}")
+                        print(f" LIME internal predict - X shape: {X.shape}")
                     else:
                         X = np.array(X).reshape(1, -1)
-                        print(f"📊 LIME internal predict - X converted to shape: {X.shape}")
+                        print(f" LIME internal predict - X converted to shape: {X.shape}")
                     
                     # 컬럼 수 검증
                     if X.shape[1] != len(feature_names):
-                        print(f"⚠️ Column mismatch: X has {X.shape[1]} columns, expected {len(feature_names)}")
+                        print(f"[WARN] Column mismatch: X has {X.shape[1]} columns, expected {len(feature_names)}")
                         # 컬럼 수가 맞지 않으면 기본값 반환
                         return np.full(X.shape[0], 0.042)
                     
@@ -734,31 +734,31 @@ class AnalysisService:
                     if len(predictions.shape) > 1:
                         predictions = predictions.flatten()
                     
-                    print(f"📊 LIME prediction successful: {predictions[:3] if len(predictions) > 3 else predictions}")
+                    print(f" LIME prediction successful: {predictions[:3] if len(predictions) > 3 else predictions}")
                     return predictions
                     
                 except Exception as e:
-                    print(f"⚠️ LIME prediction error: {e}")
+                    print(f"[WARN] LIME prediction error: {e}")
                     # 안전한 fallback
                     n_samples = X.shape[0] if hasattr(X, 'shape') and len(X.shape) > 1 else 1
                     return np.full(n_samples, 0.042)
             
             # LIME explainer의 설명 생성 시도
             try:
-                print(f"📊 Starting LIME explain_instance...")
+                print(f" Starting LIME explain_instance...")
                 explanation = explainer.explain_instance(
                     instance, 
                     lime_compatible_predict, 
                     num_features=num_features
                 )
-                print(f"📊 LIME explain_instance completed successfully")
+                print(f" LIME explain_instance completed successfully")
                 
             except Exception as lime_error:
-                print(f"⚠️ LIME explain_instance failed: {lime_error}")
+                print(f"[WARN] LIME explain_instance failed: {lime_error}")
                 
                 # 대체 방법: 더 간단한 LIME 설정으로 재시도
                 try:
-                    print(f"📊 Retrying LIME with simplified settings...")
+                    print(f" Retrying LIME with simplified settings...")
                     
                     # 더 작은 데이터셋으로 explainer 재생성
                     simple_data = train_data_clean[:100] if len(train_data_clean) > 100 else train_data_clean
@@ -777,10 +777,10 @@ class AnalysisService:
                         lime_compatible_predict, 
                         num_features=min(num_features, len(feature_names))
                     )
-                    print(f"📊 LIME retry successful")
+                    print(f" LIME retry successful")
                     
                 except Exception as retry_error:
-                    print(f"⚠️ LIME retry also failed: {retry_error}")
+                    print(f"[WARN] LIME retry also failed: {retry_error}")
                     
                     # 최종 fallback: 가짜 explanation 생성
                     class MockExplanation:
@@ -796,7 +796,7 @@ class AnalysisService:
                             return [(name, val) for name, val in zip(self.feature_names, values)]
                     
                     explanation = MockExplanation(feature_names, instance)
-                    print(f"📊 Using mock LIME explanation as fallback")
+                    print(f" Using mock LIME explanation as fallback")
             
             # 설명 결과 파싱 (한글명 포함)
             lime_values = []
@@ -813,7 +813,7 @@ class AnalysisService:
                 instance_df = pd.DataFrame([instance], columns=feature_names)
                 prediction = float(wrapped_model.predict(instance_df)[0])
             except Exception as e:
-                print(f"⚠️ Final prediction failed: {e}")
+                print(f"[WARN] Final prediction failed: {e}")
                 prediction = 0.042  # fallback
             
             return {

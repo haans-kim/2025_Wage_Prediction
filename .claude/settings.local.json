@@ -77,7 +77,14 @@
       "Bash(git log:*)",
       "Bash(/tmp/old_model.pkl)",
       "Bash(c:/temp/old_data.pkl)",
-      "Bash(c:/temp/old_dashboard_service.py)"
+      "Bash(c:/temp/old_dashboard_service.py)",
+      "Bash(make start:*)",
+      "Bash(.venvScriptsactivate)",
+      "Bash(cmd /c \"taskkill /F /PID 5452\")",
+      "Bash(.venvScriptspython.exe run.py)",
+      "Bash(cmd /c \"for /f \"\"tokens=5\"\" %a in (''netstat -ano ^| findstr :3000'') do taskkill /F /PID %a\")",
+      "Bash(cmd /c \"taskkill /F /IM node.exe\")",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []

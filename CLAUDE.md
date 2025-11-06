@@ -129,3 +129,11 @@ docker-compose logs -f  # View logs
 - Frontend: React Testing Library (`npm test`)
 - Backend: Manual testing via API endpoints
 - No automated backend tests currently implemented
+
+## Claude Code Guidelines
+
+### Important Rules
+- **NEVER use emojis in any code, logs, or comments**
+- All logging and debugging output must use plain ASCII text only
+- Replace emojis with descriptive text like [OK], [WARN], [ERROR], [INFO], [DATA], etc.
+- Windows cp949 encoding is incompatible with emoji characters - always use ASCII alternatives
