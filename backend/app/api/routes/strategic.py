@@ -146,30 +146,15 @@ async def get_sensitivity_analysis() -> Dict[str, Any]:
 @router.get("/feature-importance")
 async def get_feature_importance() -> Dict[str, Any]:
     """
-    Simple Regression 모델의 10개 주요 지표 Feature Importance 조회
+    현재 학습된 모델의 Feature Importance 조회 (hwaseung 방식 적용)
     """
     try:
-        # Simple Regression 모델의 Feature Importance 사용
-        importance_data = simple_regression_service.get_feature_importance()
-
-        # Dashboard에서 기대하는 형식으로 변환
-        features = []
-        for item in importance_data['features']:
-            features.append({
-                "name": item['feature_code'],
-                "korean_name": item['feature'],
-                "importance": item['importance'] / 100.0  # 0-1 범위로 정규화
-            })
-
-        return {"features": features}
-
-        # 아래는 이전 로직 (백업용으로 남겨둠)
         from app.services.data_service import data_service
         from app.services.modeling_service import modeling_service
         from app.services.analysis_service import analysis_service
 
-        # 1. 먼저 학습된 모델의 Feature Importance 시도
-        if False and modeling_service.current_model is not None:
+        # 1. 먼저 학습된 모델의 Feature Importance 시도 (hwaseung 방식)
+        if modeling_service.current_model is not None:
             try:
                 importance_data = analysis_service.get_feature_importance(
                     model=modeling_service.current_model,
@@ -220,33 +205,6 @@ async def get_feature_importance() -> Dict[str, Any]:
 
                 correlations = correlations.sort_values(ascending=False)
 
-                # 한글 매핑
-                korean_names = {
-                    "wage_increase_bu_group": "업계 Base-up 인상률",
-                    "wage_increase_mi_group": "업계 MI 인상률",
-                    "wage_increase_total_group": "업계 총 인상률",
-                    "gdp_growth_kr": "한국 GDP 성장률",
-                    "cpi_kr": "한국 소비자물가지수",
-                    "unemployment_rate_kr": "한국 실업률",
-                    "minimum_wage_increase_kr": "최저임금 인상률",
-                    "gdp_growth_usa": "미국 GDP 성장률",
-                    "cpi_usa": "미국 소비자물가지수",
-                    "eci_usa": "미국 고용비용지수",
-                    "exchange_rate_change_krw": "환율 변동률",
-                    "revenue_growth_sbl": "매출 성장률",
-                    "op_profit_growth_sbl": "영업이익 성장률",
-                    "labor_to_revenue_sbl": "인건비 비중",
-                    "labor_cost_per_employee_sbl": "인당 인건비",
-                    "revenue_per_employee_sbl": "인당 매출액",
-                    "op_profit_per_employee_sbl": "인당 영업이익",
-                    "hcroi_sbl": "인적자본 투자수익률",
-                    "hcva_sbl": "인적자본 부가가치",
-                    "market_size_growth_rate": "시장규모 성장률",
-                    "compensation_competitiveness": "보상 경쟁력",
-                    "wage_increase_ce": "CE 임금인상률",
-                    "public_sector_wage_increase": "공공부문 임금인상률"
-                }
-
                 # 상위 10개 feature 선택
                 top_features = correlations.head(10)
                 features = []
@@ -254,11 +212,16 @@ async def get_feature_importance() -> Dict[str, Any]:
                 # 중요도 정규화 (합이 1이 되도록)
                 total_corr = top_features.sum()
 
+                # 한글 매핑 (data_service의 column_mapping 사용)
+                column_mapping = getattr(data_service, 'column_mapping', {})
+
                 for feature_name, correlation in top_features.items():
                     importance = correlation / total_corr if total_corr > 0 else 0.1
+                    korean_name = column_mapping.get(feature_name, feature_name)
+
                     features.append({
                         "name": feature_name,
-                        "korean_name": korean_names.get(feature_name, feature_name),
+                        "korean_name": korean_name,
                         "importance": float(importance)
                     })
 

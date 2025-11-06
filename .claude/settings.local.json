@@ -63,7 +63,11 @@
       "Bash(git commit:*)",
       "Bash(git config:*)",
       "Bash(./SambioWage.exe)",
-      "Bash(cmd //c \"robocopy C:\\Project\\2025_Wage_Prediction\\release\\win-unpacked D:\\SambioWage2025 /E /MT:8 /NFL /NDL /NJH /NJS\")"
+      "Bash(cmd //c \"robocopy C:\\Project\\2025_Wage_Prediction\\release\\win-unpacked D:\\SambioWage2025 /E /MT:8 /NFL /NDL /NJH /NJS\")",
+      "Bash(wmic process:*)",
+      "Bash(if [ -d \"venv\" ])",
+      "Bash(python:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []
