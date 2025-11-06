@@ -77,12 +77,12 @@ async def compare_models(n_select: int = Query(default=3, ge=1, le=10)) -> Dict[
             # 기존 ExplainerDashboard 중지 (새로운 모델로 재생성 필요)
             if explainer_dashboard_service.is_running:
                 explainer_dashboard_service.stop_dashboard()
-                print("🔄 Stopped ExplainerDashboard for model comparison update")
-            
+                print("[INFO] Stopped ExplainerDashboard for model comparison update")
+
             # Feature importance 캐시 클리어
             analysis_service._importance_cache.clear()
             analysis_service._shap_cache.clear()
-            print("🧹 Cleared analysis caches after model comparison")
+            print("[INFO] Cleared analysis caches after model comparison")
             
         except Exception as dashboard_error:
             print(f"[WARNING] ExplainerDashboard update failed: {dashboard_error}")
@@ -112,13 +112,13 @@ async def train_specific_model(request: ModelTrainingRequest) -> Dict[str, Any]:
             # 기존 ExplainerDashboard 중지
             if explainer_dashboard_service.is_running:
                 explainer_dashboard_service.stop_dashboard()
-                print("🔄 Stopped existing ExplainerDashboard for model update")
-            
+                print("[INFO] Stopped existing ExplainerDashboard for model update")
+
             # Feature importance 캐시 클리어 (새로운 모델 반영)
             from app.services.analysis_service import analysis_service
             analysis_service._importance_cache.clear()
             analysis_service._shap_cache.clear()
-            print("🧹 Cleared analysis caches for new model")
+            print("[INFO] Cleared analysis caches for new model")
             
             print("[OK] ExplainerDashboard will be recreated on next request with new model data")
             

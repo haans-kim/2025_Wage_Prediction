@@ -386,12 +386,12 @@ class ModelingService:
             
             # GBR이 없으면 새로 생성해서 최상위에 추가
             if gbr_model is None:
-                print("🔧 GBR not in best models, creating and adding to top")
+                print("[INFO] GBR not in best models, creating and adding to top")
                 gbr_model = create_model('gbr', verbose=False, random_state=42)
                 best_models = [gbr_model] + best_models
             else:
                 # GBR이 있으면 최상위로 이동
-                print("🔧 Moving GBR to top of best models")
+                print("[INFO] Moving GBR to top of best models")
                 best_models.remove(gbr_model)
                 best_models = [gbr_model] + best_models
             

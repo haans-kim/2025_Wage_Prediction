@@ -45,27 +45,27 @@ async def upload_data(file: UploadFile = File(...)) -> Dict[str, Any]:
         )
     
     try:
-        print(f"📁 Processing file: {file.filename}")
-        
+        print(f"[DATA] Processing file: {file.filename}")
+
         # 파일 내용 읽기
         contents = await file.read()
         print(f"[DATA] File size: {len(contents)} bytes")
-        
+
         # 파일 저장
         saved_path = data_service.save_uploaded_file(contents, file.filename)
-        print(f"💾 File saved to: {saved_path}")
-        
+        print(f"[DATA] File saved to: {saved_path}")
+
         # 데이터 로드 및 분석
         data_info = data_service.load_data_from_file(saved_path)
-        print(f"📈 Data loaded: {data_info['basic_stats']['shape']}")
-        
+        print(f"[DATA] Data loaded: {data_info['basic_stats']['shape']}")
+
         # 모델링 준비 상태 확인
         validation_result = data_service.validate_data_for_modeling()
-        print(f"[OK] Validation: {validation_result.get('is_valid', False)}")
-        
+        print(f"[DATA] Validation: {validation_result.get('is_valid', False)}")
+
         # 요약 정보 생성
         summary = data_service.get_data_summary()
-        print(f"📋 Summary generated: {summary['shape']}")
+        print(f"[DATA] Summary generated: {summary['shape']}")
         
         # 모델 설정 정보 추가
         model_config = data_service.get_model_config()
