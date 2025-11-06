@@ -70,7 +70,14 @@
       "Bash(curl:*)",
       "Bash(for pid in 3776 6968)",
       "Bash(nul)",
-      "Bash(for pid in 38876 31224 15452 39308 4796 8032 39392 5908 39068 10704 42700)"
+      "Bash(for pid in 38876 31224 15452 39308 4796 8032 39392 5908 39068 10704 42700)",
+      "Bash(for pid in 36336 32144 33224 49536)",
+      "Bash(do taskkill //F //PID $pid 2)",
+      "Bash(./backend/venv/Scripts/python.exe:*)",
+      "Bash(git log:*)",
+      "Bash(/tmp/old_model.pkl)",
+      "Bash(c:/temp/old_data.pkl)",
+      "Bash(c:/temp/old_dashboard_service.py)"
     ],
     "deny": [],
     "ask": []

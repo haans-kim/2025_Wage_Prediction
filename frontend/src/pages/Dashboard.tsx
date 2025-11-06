@@ -139,7 +139,7 @@ export const Dashboard: React.FC = () => {
         fetch(`${API_BASE_URL}/api/dashboard/variables`).then(r => r.json()).catch(err => { console.error('Variables error:', err); return { variables: [], current_values: {} }; }),
         fetch(`${API_BASE_URL}/api/dashboard/economic-indicators`).then(r => r.json()).catch(err => { console.error('Indicators error:', err); return { indicators: {} }; }),
         fetch(`${API_BASE_URL}/api/dashboard/trend-data`).then(r => r.json()).catch(err => { console.error('Trend error:', err); return null; }),
-        fetch(`${API_BASE_URL}/api/dashboard/model-feature-importance`).then(r => r.json()).catch(err => { console.error('Feature importance error:', err); return null; })
+        fetch(`${API_BASE_URL}/api/analysis/feature-importance?method=permutation&top_n=10`).then(r => r.json()).catch(err => { console.error('Feature importance error:', err); return null; })
       ]);
 
       console.log('API responses:', { templatesRes, variablesRes, indicatorsRes, trendRes, featureRes });

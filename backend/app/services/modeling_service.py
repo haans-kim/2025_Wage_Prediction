@@ -70,7 +70,7 @@ class ModelingService:
                 'train_size': 0.9,
                 'cv_folds': 2 if data_size < 15 else 3,  # 매우 작은 데이터는 2-fold
                 'models': self.small_data_models,
-                'normalize': True,  # 작은 데이터도 정규화 적용
+                'normalize': False,  # 정규화 비활성화
                 'transformation': False,  # wage_increase_*_group 컬럼 보존을 위해 비활성화
                 'remove_outliers': False,  # wage_increase_*_group 컬럼 보존을 위해 비활성화
                 'feature_selection': False,  # GBR 사용으로 특성 선택 불필요
@@ -293,9 +293,9 @@ class ModelingService:
                 categorical_imputation=config.get('categorical_imputation', 'mode'),
                 
                 # 정규화
-                normalize=config.get('normalize', True),
+                normalize=config.get('normalize', False),
                 normalize_method=config.get('normalize_method', 'zscore'),
-                
+
                 # 변환
                 transformation=config.get('transformation', False),
                 transformation_method=config.get('transformation_method', 'yeo-johnson'),
@@ -490,13 +490,18 @@ class ModelingService:
             sys.stderr = old_stderr
 
         # 모델 자동 저장 (stdout 복원 후 수행)
-        self._save_model(model_name)
-        
+        save_success = self._save_model(model_name)
+
+        # 저장 후 모델을 메모리에 다시 로드 (서버 재시작 없이 최신 모델 사용)
+        if save_success:
+            self._load_latest_model_if_exists()
+            print("[OK] Model reloaded into memory automatically after save")
+
         return {
             'message': f'Model {model_name} trained and saved successfully',
             'model_type': type(self.current_model).__name__,
             'model_name': model_name,
-            'model_saved': True
+            'model_saved': save_success
         }
     
     def get_model_evaluation(self) -> Dict[str, Any]:

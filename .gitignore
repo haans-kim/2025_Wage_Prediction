@@ -261,3 +261,4 @@ release/
 *.zip
 resources/python-runtime/
 python-embedded.zip 
+nul
