@@ -65,7 +65,7 @@ class DashboardService:
             # 상위 Feature Importance 변수들 추가 (실제 feature 이름으로 수정)
             'labor_to_revenue_sbl': ('labor_cost_rate_sbl', 0.01),  # 25.0% → 0.25
             'cpi_kr': ('cpi_kr', 0.01),  # 2.5% → 0.025
-            'labor_cost_per_employee_sbl': ('labor_cost_per_employee_sbl', 100000000),  # 100억원 → 100억원
+            'labor_cost_per_employee_sbl': ('labor_cost_per_employee_sbl', 1000000),  # 100 → 100백만원 (1억원)
             'eci_usa': ('eci_usa', 0.01),  # 3.0% → 0.03
             # 추가 매핑
             'op_profit_growth_sbl': ('op_profit_growth_sbl', 0.01),  # 영업이익 증가율
@@ -196,14 +196,34 @@ class DashboardService:
             latest_row = df.iloc[-1]  # 최신 데이터 (2024년)
 
             input_data = {}
+            user_adjusted_cols = set()  # 사용자가 조정한 컬럼 추적
+
+            # 퍼센트 단위로 입력되는 컬럼들 (100으로 나눠야 함)
+            percentage_columns = {
+                'gdp_growth_kr', 'cpi_kr', 'unemployment_rate_kr',
+                'gdp_growth_usa', 'cpi_usa', 'unemployment_rate_us',
+                'eci_usa', 'exchange_rate_change_krw', 'revenue_growth_sbl',
+                'op_profit_growth_sbl', 'market_size_growth_rate',
+                'wage_increase_bu_group', 'wage_increase_mi_group',
+                'wage_increase_total_group', 'wage_increase_ce',
+                'public_sector_wage_increase', 'minimum_wage_increase_kr'
+            }
 
             for col in feature_columns:
                 if col in variables:
-                    # 사용자가 조정한 변수 사용 (변수명이 실제 컬럼명과 일치하는 경우)
-                    input_data[col] = variables[col]
-                    print(f"  [USER] Using user input for {col}: {variables[col]}")
+                    # 사용자가 조정한 변수 사용
+                    value = variables[col]
+
+                    # 퍼센트 컬럼은 100으로 나눔 (2.5 → 0.025)
+                    if col in percentage_columns and abs(value) > 1:
+                        value = value / 100
+                        print(f"  [CONVERT] {col}: {variables[col]} → {value} (percentage to decimal)")
+
+                    input_data[col] = value
+                    user_adjusted_cols.add(col)
+                    print(f"  [USER] Using user input for {col}: {value}")
                 else:
-                    # 최신 데이터값 사용
+                    # 최신 데이터값 사용 (원 단위)
                     value = pd.to_numeric(latest_row[col], errors='coerce')
                     if pd.notna(value):
                         input_data[col] = value
@@ -211,6 +231,7 @@ class DashboardService:
                         input_data[col] = 0.0
 
             # 학습 시와 동일한 스케일링 적용 (백만 단위로 변환)
+            # 단, 사용자 입력값은 이미 백만원 단위이므로 스케일링하지 않음
             large_value_columns = [
                 'labor_cost_per_employee_sbl',
                 'revenue_per_employee_sbl',
@@ -218,11 +239,13 @@ class DashboardService:
                 'hcva_sbl'
             ]
             for col in large_value_columns:
-                if col in input_data:
-                    # 백만 단위로 스케일링
+                if col in input_data and col not in user_adjusted_cols:
+                    # 원 단위 → 백만원 단위로 스케일링
                     original_val = input_data[col]
                     input_data[col] = original_val / 1e6
-                    print(f"  [SCALE] {col}: {original_val} → {input_data[col]:.2f}M")
+                    print(f"  [SCALE] {col}: {original_val:.0f}원 → {input_data[col]:.2f}M")
+                elif col in user_adjusted_cols:
+                    print(f"  [SKIP SCALE] {col}: {input_data[col]:.2f}M (user input, already in millions)")
 
             print(f"[DATA] Model input prepared with {len(input_data)} features")
             
