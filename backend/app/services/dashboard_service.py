@@ -76,6 +76,7 @@ class DashboardService:
             'minimum_wage_increase_kr': ('minimum_wage_increase_kr', 0.01),  # 최저임금인상률
             'wage_increase_total_sbl': ('wage_increase_total_sbl', 0.01),  # 총 인상률
             'compensation_competitiveness': ('compensation_competitiveness', 0.01),  # 보상경쟁력
+            'cpi_usa': ('cpi_usa', 0.01),  # 미국 소비자물가상승률
             'gdp_growth_usa': ('gdp_growth_usa', 0.01),  # 미국 GDP 성장률
             'public_sector_wage_increase': ('public_sector_wage_increase', 0.01),  # 공공기관 임금인상률
             'hcva_sbl': ('hcva_sbl', 1.0),  # HCVA
@@ -163,6 +164,102 @@ class DashboardService:
                 "max_value": 8.0,
                 "unit": "%",
                 "current_value": 3.0
+            },
+            "compensation_competitiveness": {
+                "name": "보상경쟁력",
+                "description": "시장 대비 보상 경쟁력 지수 (%)",
+                "min_value": -10.0,
+                "max_value": 10.0,
+                "unit": "%",
+                "current_value": 0.0
+            },
+            "cpi_usa": {
+                "name": "미국 소비자물가상승률",
+                "description": "미국 CPI 상승률 (%)",
+                "min_value": 0.0,
+                "max_value": 10.0,
+                "unit": "%",
+                "current_value": 2.5
+            },
+            "minimum_wage_increase_kr": {
+                "name": "최저임금인상률",
+                "description": "법정 최저임금 인상률 (%)",
+                "min_value": 0.0,
+                "max_value": 15.0,
+                "unit": "%",
+                "current_value": 5.0
+            },
+            "unemployment_rate_us": {
+                "name": "미국 실업률",
+                "description": "미국 경제활동인구 대비 실업자 비율 (%)",
+                "min_value": 2.0,
+                "max_value": 10.0,
+                "unit": "%",
+                "current_value": 3.5
+            },
+            "op_profit_growth_sbl": {
+                "name": "SBL 영업이익 증가율",
+                "description": "전년 대비 영업이익 증가율 (%)",
+                "min_value": -20.0,
+                "max_value": 30.0,
+                "unit": "%",
+                "current_value": 5.0
+            },
+            "revenue_growth_sbl": {
+                "name": "SBL 매출액 증가율",
+                "description": "전년 대비 매출액 증가율 (%)",
+                "min_value": -10.0,
+                "max_value": 20.0,
+                "unit": "%",
+                "current_value": 5.0
+            },
+            "gdp_growth_usa": {
+                "name": "미국 GDP 성장률",
+                "description": "미국 실질 GDP 전년 대비 성장률 (%)",
+                "min_value": -5.0,
+                "max_value": 8.0,
+                "unit": "%",
+                "current_value": 2.5
+            },
+            "exchange_rate_change_krw": {
+                "name": "원화 환율 변화율",
+                "description": "달러/원 환율 변화율 (%)",
+                "min_value": -20.0,
+                "max_value": 20.0,
+                "unit": "%",
+                "current_value": 0.0
+            },
+            "wage_increase_mi_group": {
+                "name": "그룹 성과 인상률",
+                "description": "그룹사 성과급 인상률 (%)",
+                "min_value": 0.0,
+                "max_value": 10.0,
+                "unit": "%",
+                "current_value": 2.0
+            },
+            "public_sector_wage_increase": {
+                "name": "공공기관 임금인상률",
+                "description": "공공기관 평균 임금인상률 (%)",
+                "min_value": 0.0,
+                "max_value": 10.0,
+                "unit": "%",
+                "current_value": 3.0
+            },
+            "wage_increase_ce": {
+                "name": "경쟁사 임금인상률",
+                "description": "경쟁사(C사) 임금인상률 (%)",
+                "min_value": 0.0,
+                "max_value": 10.0,
+                "unit": "%",
+                "current_value": 4.0
+            },
+            "hcva_sbl": {
+                "name": "인적자본부가가치",
+                "description": "SBL HCVA 지수",
+                "min_value": 0.0,
+                "max_value": 5.0,
+                "unit": "배",
+                "current_value": 1.0
             }
         }
     
@@ -593,10 +690,10 @@ class DashboardService:
             from app.services.modeling_service import modeling_service
             
             if modeling_service.current_model:
-                # Feature importance 가져오기
+                # Feature importance 가져오기 (차트와 동일한 permutation method 사용)
                 importance_result = analysis_service.get_feature_importance(
-                    modeling_service.current_model, 
-                    method="shap", 
+                    modeling_service.current_model,
+                    method="permutation",
                     top_n=10
                 )
                 
