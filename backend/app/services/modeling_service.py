@@ -33,9 +33,9 @@ class ModelingService:
         self.prediction_features = []  # 예측에 사용할 feature 컬럼명
 
         # 데이터 크기별 모델 리스트 정의
-        self.small_data_models = ['ridge', 'lasso', 'lr', 'gbr']  # 작은 데이터용 모델
+        self.small_data_models = ['lr', 'ridge']  # 작은 데이터용 모델 (단순한 선형 모델만)
         self.medium_data_models = ['ridge', 'lasso', 'lr', 'gbr', 'rf', 'et']  # 중간 데이터용 모델
-        self.large_data_models = ['ridge', 'lasso', 'lr', 'gbr', 'rf', 'et', 'xgboost', 'lightgbm']  # 큰 데이터용 모델
+        self.large_data_models = ['ridge', 'lasso', 'lr', 'gbr', 'rf', 'et']  # 큰 데이터용 모델 (xgboost, lightgbm 제외)
 
         # 하이브리드 모델 구성 (적은 데이터에 최적화)
         self.validation_models = {
@@ -58,7 +58,21 @@ class ModelingService:
 
         # 초기화 시 저장된 최신 모델 자동 로드 시도
         self._load_latest_model_if_exists()
-    
+
+    def _get_model_type_name(self, model) -> str:
+        """파이프라인에서 실제 모델 타입 이름 추출"""
+        if model is None:
+            return None
+
+        # PyCaret의 Pipeline인 경우 마지막 단계의 실제 모델 가져오기
+        if hasattr(model, 'steps'):
+            # Pipeline의 마지막 단계가 실제 모델
+            actual_model = model.steps[-1][1]
+            return type(actual_model).__name__
+        else:
+            # Pipeline이 아닌 경우 직접 타입 반환
+            return type(model).__name__
+
     def check_pycaret_availability(self) -> bool:
         """PyCaret 사용 가능 여부 확인"""
         return PYCARET_AVAILABLE
@@ -386,23 +400,40 @@ class ModelingService:
             # 결과 정보 추출
             comparison_results = pull()
             
-            # GBR이 포함되어 있으면 최상위로 이동, 없으면 추가
-            gbr_model = None
-            for model in best_models:
-                if hasattr(model, '__class__') and 'GradientBoosting' in str(type(model)):
-                    gbr_model = model
-                    break
-            
-            # GBR이 없으면 새로 생성해서 최상위에 추가
-            if gbr_model is None:
-                print("[INFO] GBR not in best models, creating and adding to top")
-                gbr_model = create_model('gbr', verbose=False, random_state=42)
-                best_models = [gbr_model] + best_models
+            # 데이터 크기에 따라 추천 모델 결정
+            if data_size < 30:
+                # 작은 데이터셋: Linear Regression을 최상위로
+                print(f"[INFO] Small dataset ({data_size} samples): prioritizing Linear Regression")
+                lr_model = None
+                for model in best_models:
+                    if hasattr(model, '__class__') and 'LinearRegression' in str(type(model)):
+                        lr_model = model
+                        break
+
+                if lr_model is None:
+                    print("[INFO] LR not in best models, creating and adding to top")
+                    lr_model = create_model('lr', verbose=False)
+                    best_models = [lr_model] + best_models
+                else:
+                    print("[INFO] Moving LR to top of best models")
+                    best_models.remove(lr_model)
+                    best_models = [lr_model] + best_models
             else:
-                # GBR이 있으면 최상위로 이동
-                print("[INFO] Moving GBR to top of best models")
-                best_models.remove(gbr_model)
-                best_models = [gbr_model] + best_models
+                # 중간/큰 데이터셋: GBR을 최상위로
+                gbr_model = None
+                for model in best_models:
+                    if hasattr(model, '__class__') and 'GradientBoosting' in str(type(model)):
+                        gbr_model = model
+                        break
+
+                if gbr_model is None:
+                    print("[INFO] GBR not in best models, creating and adding to top")
+                    gbr_model = create_model('gbr', verbose=False, random_state=42)
+                    best_models = [gbr_model] + best_models
+                else:
+                    print("[INFO] Moving GBR to top of best models")
+                    best_models.remove(gbr_model)
+                    best_models = [gbr_model] + best_models
             
             # feature names 저장
             from pycaret.regression import get_config
@@ -414,22 +445,22 @@ class ModelingService:
             self.model_results = {
                 'best_models': best_models,
                 'comparison_df': comparison_results,
-                'recommended_model': best_models[0],  # 첫 번째는 항상 GBR
-                'gbr_prioritized': True  # GBR 우선 선정 표시
+                'recommended_model': best_models[0],  # 데이터 크기에 따라 LR 또는 GBR
+                'small_dataset': data_size < 30  # 작은 데이터셋 여부
             }
-            # 모델 비교 후에는 current_model을 설정하지 않음 (명시적 학습 필요)
-            # self.current_model = best_models[0] if best_models else None
+            # 모델 비교 시작 시 이전 학습 모델 리셋 (명시적 학습 필요)
+            self.current_model = None
             self.compared_models = best_models  # 비교된 모델들만 저장
             
         except Exception as e:
-            # 실패 시 기본 GBR 사용 (더 나은 성능을 위해)
-            warnings.warn(f"Model comparison failed: {str(e)}. Using default Gradient Boosting Regressor.")
-            
-            gbr_model = create_model('gbr', verbose=False, random_state=42)
+            # 실패 시 기본 Linear Regression 사용 (단순하고 안정적)
+            warnings.warn(f"Model comparison failed: {str(e)}. Using default Linear Regression.")
+
+            lr_model = create_model('lr', verbose=False)
             self.model_results = {
-                'best_models': [gbr_model],
+                'best_models': [lr_model],
                 'comparison_df': None,
-                'recommended_model': gbr_model,
+                'recommended_model': lr_model,
                 'fallback_used': True
             }
 
@@ -447,7 +478,7 @@ class ModelingService:
             'message': 'Model comparison completed',
             'models_compared': len(models_to_use),
             'best_model_count': len(self.model_results['best_models']),
-            'recommended_model_type': type(self.model_results['recommended_model']).__name__,
+            'recommended_model_type': self._get_model_type_name(self.model_results['recommended_model']),
             'comparison_available': self.model_results['comparison_df'] is not None,
             'data_size_category': 'small' if data_size < 30 else 'medium' if data_size < 100 else 'large'
         }
@@ -498,11 +529,18 @@ class ModelingService:
 
         # 모델 자동 저장 (stdout 복원 후 수행)
         self._save_model(model_name)
-        
+
+        # 분석 캐시 클리어 (새 모델이 학습되었으므로)
+        try:
+            from app.services.analysis_service import analysis_service
+            analysis_service.clear_cache()
+        except Exception as e:
+            print(f"[WARNING] Could not clear analysis cache: {e}")
+
         return {
             'message': f'Model {model_name} trained and saved successfully',
-            'model_type': type(self.current_model).__name__,
-            'model_name': model_name,
+            'model_type': self._get_model_type_name(self.current_model),
+            'model_code': model_name,
             'model_saved': True
         }
     
@@ -536,7 +574,7 @@ class ModelingService:
         
         return {
             'message': 'Model evaluation completed',
-            'model_type': type(self.current_model).__name__,
+            'model_type': self._get_model_type_name(self.current_model),
             'evaluation_available': evaluation_results is not None,
             'evaluation_data': evaluation_results.to_dict() if evaluation_results is not None else None
         }
@@ -623,7 +661,7 @@ class ModelingService:
             'model_trained': self.current_model is not None,
             'models_compared': self.model_results is not None,
             'data_loaded': data_service.current_data is not None,
-            'current_model_type': type(self.current_model).__name__ if self.current_model else None
+            'current_model_type': self._get_model_type_name(self.current_model) if self.current_model else None
         }
     
     def _save_model(self, model_name: str = None) -> bool:
@@ -707,10 +745,10 @@ class ModelingService:
             
             # 모델 로드
             self.current_model = load_model(filepath)
-            
+
             return {
                 'message': f'Model loaded successfully from {filename}.pkl',
-                'model_type': type(self.current_model).__name__
+                'model_type': self._get_model_type_name(self.current_model)
             }
             
         except Exception as e:

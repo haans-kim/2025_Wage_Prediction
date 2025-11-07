@@ -92,6 +92,9 @@ export const Modeling: React.FC = () => {
     try {
       const result = await apiClient.setupModeling(targetColumn);
       setSetupResult(result);
+      // 환경설정 시작 시 이전 결과 리셋
+      setComparisonResult(null);
+      setTrainingResult(null);
       await loadInitialData(); // 상태 새로고침
     } catch (error) {
       setError(error instanceof Error ? error.message : '환경 설정 중 오류가 발생했습니다.');
@@ -107,6 +110,8 @@ export const Modeling: React.FC = () => {
     try {
       const result = await apiClient.compareModels(3);
       setComparisonResult(result);
+      // 모델 비교 시작 시 이전 학습 결과 리셋
+      setTrainingResult(null);
       await loadInitialData(); // 상태 새로고침
     } catch (error) {
       setError(error instanceof Error ? error.message : '모델 비교 중 오류가 발생했습니다.');
@@ -361,32 +366,46 @@ export const Modeling: React.FC = () => {
               {status?.model_trained && <CheckCircle className="ml-auto h-5 w-5 text-green-600" />}
             </CardTitle>
             <CardDescription>
-              선택된 모델 학습 및 하이퍼파라미터 튜닝
+              {trainingResult
+                ? `학습된 모델: ${trainingResult.model_type}`
+                : comparisonResult
+                ? `추천 모델: ${comparisonResult.recommended_model_type}`
+                : '선택된 모델 학습 및 하이퍼파라미터 튜닝'}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {!status?.model_trained ? (
-              <Button 
-                variant="outline" 
-                className="w-full"
-                onClick={() => handleTrainModel('lr')}
-                disabled={loading?.startsWith('train') || !status?.environment_setup}
-              >
-                {loading?.startsWith('train') ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    학습 중...
-                  </>
-                ) : (
-                  '자동 모델 학습'
+              <>
+                {comparisonResult && !trainingResult && (
+                  <div className="mb-3 p-2 bg-muted rounded text-xs text-center">
+                    추천 모델: <strong>{comparisonResult.recommended_model_type}</strong>
+                  </div>
                 )}
-              </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    const modelToTrain = comparisonResult?.recommended_model_code || 'lr';
+                    handleTrainModel(modelToTrain);
+                  }}
+                  disabled={loading?.startsWith('train') || !status?.environment_setup}
+                >
+                  {loading?.startsWith('train') ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      학습 중...
+                    </>
+                  ) : (
+                    comparisonResult && !trainingResult ? '추천 모델 학습' : '자동 모델 학습'
+                  )}
+                </Button>
+              </>
             ) : (
               <div className="text-center">
                 <Brain className="mx-auto h-8 w-8 text-blue-600 mb-2" />
                 <p className="text-sm text-muted-foreground">모델 학습 완료</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {status.current_model_type}
+                  {trainingResult?.model_type || status.current_model_type}
                 </p>
               </div>
             )}
@@ -404,38 +423,63 @@ export const Modeling: React.FC = () => {
             </CardTitle>
             <CardDescription>
               현재 데이터에 최적화된 모델 목록
+              {trainingResult && (
+                <span className="ml-2 text-xs text-green-600 font-medium">
+                  (현재: {trainingResult.model_type})
+                </span>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {availableModels.map((model) => (
-                <div key={model.code} className="border border-border rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-sm">{model.name}</h4>
-                    {model.recommended && (
-                      <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
-                        추천
-                      </span>
-                    )}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => handleTrainModel(model.code)}
-                    disabled={loading === `train-${model.code}`}
+              {availableModels.map((model) => {
+                const isCurrentModel = trainingResult &&
+                  (trainingResult.model_code === model.code ||
+                   trainingResult.model_type === model.name);
+
+                return (
+                  <div
+                    key={model.code}
+                    className={`border rounded-lg p-3 ${
+                      isCurrentModel
+                        ? 'border-green-500 bg-green-50 dark:bg-green-950'
+                        : 'border-border'
+                    }`}
                   >
-                    {loading === `train-${model.code}` ? (
-                      <>
-                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                        학습 중...
-                      </>
-                    ) : (
-                      '학습'
-                    )}
-                  </Button>
-                </div>
-              ))}
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-medium text-sm">{model.name}</h4>
+                      <div className="flex gap-1">
+                        {model.recommended && (
+                          <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
+                            추천
+                          </span>
+                        )}
+                        {isCurrentModel && (
+                          <span className="text-xs bg-green-600 text-white px-2 py-1 rounded">
+                            학습완료
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={isCurrentModel ? "default" : "outline"}
+                      className="w-full"
+                      onClick={() => handleTrainModel(model.code)}
+                      disabled={loading === `train-${model.code}`}
+                    >
+                      {loading === `train-${model.code}` ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          학습 중...
+                        </>
+                      ) : (
+                        isCurrentModel ? '재학습' : '학습'
+                      )}
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>

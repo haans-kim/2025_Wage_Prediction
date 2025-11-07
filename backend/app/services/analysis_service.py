@@ -45,7 +45,13 @@ class AnalysisService:
         self._shap_cache = {}
         self._importance_cache = {}
         self._last_model_id = None
-        
+
+    def clear_cache(self):
+        """캐시 초기화 (모델이 바뀔 때 호출)"""
+        self._shap_cache = {}
+        self._importance_cache = {}
+        print("[CACHE] Analysis cache cleared")
+
     def _get_training_data(self):
         """PyCaret 환경에서 학습 데이터 가져오기 또는 현재 데이터에서 생성"""
         try:
@@ -367,14 +373,21 @@ class AnalysisService:
     def get_feature_importance(self, model, method: str = "shap", top_n: int = 15) -> Dict[str, Any]:
         """Feature importance 분석"""
 
-        # 캐시 키 생성
+        # 모델 타입 추출 (Pipeline인 경우 실제 모델 타입 사용)
+        if hasattr(model, 'steps'):
+            actual_model = model.steps[-1][1]
+            model_type = type(actual_model).__name__
+        else:
+            model_type = type(model).__name__
+
+        # 캐시 키 생성 (모델 타입 포함)
         model_id = id(model)
-        cache_key = f"{model_id}_{method}_{top_n}"
+        cache_key = f"{model_type}_{model_id}_{method}_{top_n}"
 
         # 캐시에서 결과 확인
         if cache_key in self._importance_cache:
             cached_result = self._importance_cache[cache_key]
-            print(f"[CACHE] Using cached {method} importance for model {model_id}")
+            print(f"[CACHE] Using cached {method} importance for model {model_type} (ID: {model_id})")
             return cached_result
         
         try:
@@ -481,12 +494,22 @@ class AnalysisService:
                     if hasattr(model, 'steps'):
                         # Pipeline의 마지막 단계(실제 모델) 추출
                         actual_model = model.steps[-1][1]
-                        print(f" Using actual model from Pipeline: {type(actual_model).__name__}")
-                        
+                        model_name = type(actual_model).__name__
+                        print(f" Using actual model from Pipeline: {model_name}")
+
+                        # 디버깅: 모델 속성 확인
+                        has_coef = hasattr(actual_model, 'coef_')
+                        has_feature_imp = hasattr(actual_model, 'feature_importances_')
+                        print(f"[DEBUG] Model {model_name}: has_coef={has_coef}, has_feature_imp={has_feature_imp}")
+                        if has_coef:
+                            coef_sum = np.sum(np.abs(actual_model.coef_))
+                            print(f"[DEBUG] Coefficient sum: {coef_sum:.6f}")
+
                         # Pipeline 전체로 예측하되, feature importance는 실제 모델에서 추출
-                        if hasattr(actual_model, 'coef_'):
+                        if has_coef:
                             # Linear 모델인 경우 계수 사용
                             importances = np.abs(actual_model.coef_)
+                            print(f"[OK] Using linear model coefficients: {len(importances)} features, sum={np.sum(importances):.4f}")
                             feature_importance = []
                             for i, importance in enumerate(importances):
                                 if i < len(self.feature_names):
@@ -510,6 +533,8 @@ class AnalysisService:
                         elif hasattr(actual_model, 'feature_importances_'):
                             # Tree 기반 모델인 경우
                             importances = actual_model.feature_importances_
+                            importance_sum = np.sum(importances)
+                            print(f"[OK] Using tree model feature importances: {len(importances)} features, sum={importance_sum:.4f}")
                             feature_importance = []
                             for i, importance in enumerate(importances):
                                 if i < len(self.feature_names):

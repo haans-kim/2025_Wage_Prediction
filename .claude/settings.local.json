@@ -91,7 +91,8 @@
       "Bash(/tmp/ca966d2_modeling.py)",
       "Bash(kill:*)",
       "Bash(./venv/bin/python:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(for pid in 23624 14764)"
     ],
     "deny": [],
     "ask": []
