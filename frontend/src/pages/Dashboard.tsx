@@ -206,48 +206,54 @@ export const Dashboard: React.FC = () => {
     try {
       const variablesToUse = variables || customVariables;
 
+      console.log('[PREDICT] Sending request with data:', variablesToUse);
+
       // Simple Regression predict endpoint 사용
       const response = await fetch(`${API_BASE_URL}/api/dashboard/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          year: 2026,
-          scenario: 'custom',
-          custom_params: variablesToUse  // custom_params로 전달
+          input_data: variablesToUse,
+          confidence_level: 0.95
         })
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[PREDICT] Error response:', errorData);
+        throw new Error(`Prediction failed: ${JSON.stringify(errorData)}`);
+      }
+
       const predictionRes = await response.json();
+      console.log('[PREDICT] Success response:', predictionRes);
 
       // Strategic API 응답 형식에 맞게 변환
       const result = predictionRes.result || predictionRes;
       const prediction = result.prediction || {};
 
       const formattedPrediction: PredictionResult = {
-        prediction: (prediction.total || 0) / 100,
-        base_up_rate: ((prediction.total || 0) / 100) - 0.021,  // 총인상률 - 성과인상률(2.1%)
-        performance_rate: 0.021,  // 2.1%로 고정
-        confidence_interval: [
-          ((prediction.total || 0) - 0.5) / 100,
-          ((prediction.total || 0) + 0.5) / 100
-        ] as [number, number],
-        confidence_level: result.confidence || 0.85,
+        prediction: result.prediction || 0,  // 백엔드가 이미 소수점 형태로 반환 (0.0549)
+        base_up_rate: result.base_up_rate || 0,
+        performance_rate: result.performance_rate || 0,
+        confidence_interval: result.confidence_interval || [0, 0],
+        confidence_level: result.confidence_level || 0.95,
         input_variables: variablesToUse,
         breakdown: {
           base_up: {
-            rate: ((prediction.total || 0) / 100) - 0.021,  // 총인상률 - 성과인상률(2.1%)
-            percentage: (prediction.total || 0) - 2.1,
+            rate: result.base_up_rate || 0,
+            percentage: (result.base_up_rate || 0) * 100,
             description: 'Base-up 인상률',
             calculation: ''
           },
           performance: {
-            rate: 0.021,  // 2.1%로 고정
-            percentage: 2.1,
+            rate: result.performance_rate || 0,
+            percentage: (result.performance_rate || 0) * 100,
             description: '성과급 인상률',
             calculation: ''
           },
           total: {
-            rate: (prediction.total || 0) / 100,
-            percentage: prediction.total || 0,
+            rate: result.prediction || 0,
+            percentage: (result.prediction || 0) * 100,
             description: '총 인상률'
           }
         }
