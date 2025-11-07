@@ -542,7 +542,7 @@ export const Dashboard: React.FC = () => {
     console.log('getWaterfallChartData called');
     console.log('featureImportance:', featureImportance);
     console.log('currentPrediction:', currentPrediction);
-    
+
     if (!featureImportance || !featureImportance.feature_importance) {
       console.log('Returning null - missing feature importance data');
       return null;
@@ -553,6 +553,9 @@ export const Dashboard: React.FC = () => {
     // 모든 10개 변수를 표시 (others 없이)
     const allFeatures = data.slice(0, 10);  // 최대 10개까지만
 
+    // 전체 중요도 합계 계산 (상대적 비율 계산용)
+    const totalImportance = allFeatures.reduce((sum: number, item: any) => sum + item.importance, 0);
+
     // 각 feature의 기여도를 계산
     interface FeatureContribution {
       feature: string;
@@ -560,18 +563,21 @@ export const Dashboard: React.FC = () => {
       contribution: number;
       importance: number;
       value: number;
+      relativePercentage: number; // 상대적 중요도 비율 (%)
     }
 
     const featureContributions: FeatureContribution[] = allFeatures.map((item: any) => {
       // importance 값을 그대로 사용 (모두 양수)
       const normalizedImportance = item.importance / allFeatures[0].importance;
+      const relativePercentage = (item.importance / totalImportance) * 100; // 상대적 비율
 
       return {
         feature: item.feature || item.name,
         feature_korean: item.feature_korean || item.korean_name || item.feature || item.name,
         contribution: normalizedImportance * 2, // 시각화를 위해 스케일 조정
         importance: item.importance,
-        value: item.importance // 표시용 원본 값
+        value: item.importance, // 표시용 원본 값
+        relativePercentage: relativePercentage // 상대적 중요도 비율
       };
     });
 
@@ -582,9 +588,9 @@ export const Dashboard: React.FC = () => {
     const labels = featureContributions.map((d: FeatureContribution) => {
       return d.feature_korean; // 한글 이름 표시
     });
-    
+
     const contributions = featureContributions.map((d: FeatureContribution) => d.contribution);
-    
+
     return {
       labels,
       datasets: [
@@ -620,9 +626,12 @@ export const Dashboard: React.FC = () => {
           label: (context: any) => {
             const value = context.parsed.x;
             const dataIndex = context.dataIndex;
-            const featureData = featureImportance?.feature_importance[dataIndex];
-            if (featureData) {
-              return `중요도: ${(featureData.importance * 100).toFixed(1)}%`;
+            const allFeatures = featureImportance?.feature_importance.slice(0, 10) || [];
+            const totalImportance = allFeatures.reduce((sum: any, item: any) => sum + item.importance, 0);
+            const featureData = allFeatures[dataIndex];
+            if (featureData && totalImportance > 0) {
+              const relativePercentage = (featureData.importance / totalImportance) * 100;
+              return `중요도: ${relativePercentage.toFixed(1)}%`;
             }
             return `기여도: ${value.toFixed(2)}`;
           }
@@ -641,9 +650,16 @@ export const Dashboard: React.FC = () => {
         align: 'center' as const,
         formatter: (_value: any, context: any) => {
           const dataIndex = context.dataIndex;
-          const featureData = featureImportance?.feature_importance[dataIndex];
-          if (featureData) {
-            return `${(featureData.importance * 100).toFixed(1)}%`;
+          const chartData = getWaterfallChartData();
+          if (chartData) {
+            // 전체 중요도에서 이 feature가 차지하는 상대적 비율 계산
+            const allFeatures = featureImportance?.feature_importance.slice(0, 10) || [];
+            const totalImportance = allFeatures.reduce((sum: any, item: any) => sum + item.importance, 0);
+            const featureData = allFeatures[dataIndex];
+            if (featureData && totalImportance > 0) {
+              const relativePercentage = (featureData.importance / totalImportance) * 100;
+              return `${relativePercentage.toFixed(1)}%`;
+            }
           }
           return '';
         }
@@ -652,32 +668,7 @@ export const Dashboard: React.FC = () => {
     scales: {
       x: {
         beginAtZero: true,
-        title: {
-          display: true,
-          text: '임금인상률 기여도 (%p)',
-          font: {
-            size: 14,
-            weight: 500
-          }
-        },
-        ticks: {
-          callback: (value: any) => {
-            const sign = value >= 0 ? '+' : '';
-            return `${sign}${value}%`;
-          },
-          font: {
-            size: 12
-          }
-        },
-        grid: {
-          drawBorder: false,
-          color: (context: any) => {
-            if (context.tick.value === 0) {
-              return 'rgba(0, 0, 0, 0.3)'; // 0 지점에 더 진한 선
-            }
-            return 'rgba(0, 0, 0, 0.1)';
-          }
-        }
+        display: false  // X축 전체를 숨김 (바 길이는 시각화용, 실제 값은 바 위 퍼센트 참조)
       },
       y: {
         ticks: {
@@ -800,15 +791,15 @@ export const Dashboard: React.FC = () => {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">GDP:</span>
-                <span className="font-medium">{economicIndicators.current_gdp_growth ? `${economicIndicators.current_gdp_growth.value}%` : '-%'}</span>
+                <span className="font-medium">{economicIndicators.current_gdp_growth !== undefined ? `${economicIndicators.current_gdp_growth}%` : 'undefined%'}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">인플레:</span>
-                <span className="font-medium">{economicIndicators.current_inflation ? `${economicIndicators.current_inflation.value}%` : '-%'}</span>
+                <span className="font-medium">{economicIndicators.current_inflation !== undefined ? `${economicIndicators.current_inflation}%` : 'undefined%'}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">실업률:</span>
-                <span className="font-medium">{economicIndicators.current_unemployment ? `${economicIndicators.current_unemployment.value}%` : '-%'}</span>
+                <span className="font-medium">{economicIndicators.current_unemployment !== undefined ? `${economicIndicators.current_unemployment}%` : 'undefined%'}</span>
               </div>
             </div>
           </CardContent>
@@ -893,16 +884,24 @@ export const Dashboard: React.FC = () => {
               {(() => {
                 const chartData = getWaterfallChartData();
                 console.log('Chart data:', chartData);
-                
+
                 if (chartData) {
                   return (
-                    <div className="h-96">
-                      <Chart
-                        type='bar'
-                        data={chartData}
-                        options={getWaterfallChartOptions()}
-                      />
-                    </div>
+                    <>
+                      <div className="h-96">
+                        <Chart
+                          type='bar'
+                          data={chartData}
+                          options={getWaterfallChartOptions()}
+                        />
+                      </div>
+                      <div className="mt-4 p-3 bg-muted/50 rounded-md border border-border">
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-semibold">계산 방식:</span> 각 변수의 퍼센트는 전체 변수 중요도에서 해당 변수가 차지하는 상대적 비율입니다.
+                          (변수 중요도 / 전체 중요도 합계 × 100) 모든 변수의 퍼센트를 합하면 100%가 됩니다.
+                        </p>
+                      </div>
+                    </>
                   );
                 } else {
                   return (
