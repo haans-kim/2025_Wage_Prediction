@@ -59,6 +59,9 @@ async def upload_data(file: UploadFile = File(...)) -> Dict[str, Any]:
         data_info = data_service.load_data_from_file(saved_path)
         print(f"[DATA] Data loaded: {data_info['basic_stats']['shape']}")
 
+        # 데이터 변경으로 인한 모델 자동 초기화
+        data_service._clear_models_on_data_change()
+
         # 모델링 준비 상태 확인
         validation_result = data_service.validate_data_for_modeling()
         print(f"[DATA] Validation: {validation_result.get('is_valid', False)}")
@@ -320,6 +323,9 @@ async def load_default_data() -> Dict[str, Any]:
     try:
         success = data_service._load_default_data()
         if success:
+            # 데이터 변경으로 인한 모델 자동 초기화
+            data_service._clear_models_on_data_change()
+
             summary = data_service.get_data_summary()
             return {
                 "message": "Default data loaded successfully",

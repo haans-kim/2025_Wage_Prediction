@@ -49,6 +49,20 @@ export const Modeling: React.FC = () => {
     loadInitialData();
   }, []);
 
+  // 페이지가 보일 때마다 recommendations 새로고침
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadInitialData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   const loadInitialData = async () => {
     try {
       // 모델링 상태 및 데이터 확인

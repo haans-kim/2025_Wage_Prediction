@@ -48,9 +48,11 @@ class AnalysisService:
 
     def clear_cache(self):
         """캐시 초기화 (모델이 바뀔 때 호출)"""
+        print(f"[CACHE] Clearing cache - before: SHAP={len(self._shap_cache)}, importance={len(self._importance_cache)}")
+        print(f"[CACHE] Importance cache keys before clear: {list(self._importance_cache.keys())}")
         self._shap_cache = {}
         self._importance_cache = {}
-        print("[CACHE] Analysis cache cleared")
+        print("[CACHE] Analysis cache cleared - all caches now empty")
 
     def _get_training_data(self):
         """PyCaret 환경에서 학습 데이터 가져오기 또는 현재 데이터에서 생성"""
@@ -384,11 +386,18 @@ class AnalysisService:
         model_id = id(model)
         cache_key = f"{model_type}_{model_id}_{method}_{top_n}"
 
+        print(f"[DEBUG] get_feature_importance called: model_type={model_type}, model_id={model_id}, method={method}")
+        print(f"[DEBUG] Current cache keys: {list(self._importance_cache.keys())}")
+        print(f"[DEBUG] Looking for cache_key: {cache_key}")
+
         # 캐시에서 결과 확인
         if cache_key in self._importance_cache:
             cached_result = self._importance_cache[cache_key]
-            print(f"[CACHE] Using cached {method} importance for model {model_type} (ID: {model_id})")
+            print(f"[CACHE HIT] Using cached {method} importance for model {model_type} (ID: {model_id})")
+            print(f"[CACHE HIT] Cached result has {len(cached_result.get('feature_importance', []))} features")
             return cached_result
+
+        print(f"[CACHE MISS] No cache found, will calculate feature importance")
         
         try:
             X_train, y_train, X_test, y_test = self._get_training_data()
@@ -529,12 +538,17 @@ class AnalysisService:
                                 "feature_importance": feature_importance
                             }
                             self._importance_cache[cache_key] = result
+                            print(f"[CACHE] Stored linear model coefficients in cache: {cache_key}")
+                            print(f"[CACHE] Stored {len(feature_importance)} features")
                             return result
                         elif hasattr(actual_model, 'feature_importances_'):
                             # Tree 기반 모델인 경우
                             importances = actual_model.feature_importances_
                             importance_sum = np.sum(importances)
                             print(f"[OK] Using tree model feature importances: {len(importances)} features, sum={importance_sum:.4f}")
+                            print(f"[DEBUG] Raw importances: {importances[:5]}...")  # 처음 5개만
+                            print(f"[DEBUG] Max importance: {np.max(importances):.6f}, Min: {np.min(importances):.6f}")
+
                             feature_importance = []
                             for i, importance in enumerate(importances):
                                 if i < len(self.feature_names):
@@ -547,13 +561,16 @@ class AnalysisService:
                                         "std": 0.0
                                     })
                             feature_importance.sort(key=lambda x: x["importance"], reverse=True)
+                            print(f"[DEBUG] Top 3 features after sort: {[(f['feature'], f['importance']) for f in feature_importance[:3]]}")
                             feature_importance = feature_importance[:top_n]
-                            
+
                             result = {
                                 "method": "built_in",
                                 "feature_importance": feature_importance
                             }
                             self._importance_cache[cache_key] = result
+                            print(f"[CACHE] Stored tree model feature importance in cache: {cache_key}")
+                            print(f"[CACHE] Stored {len(feature_importance)} features")
                             return result
                     
                     # Pipeline이 아닌 경우 일반적인 permutation importance 계산

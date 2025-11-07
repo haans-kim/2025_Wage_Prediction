@@ -232,7 +232,10 @@ class ModelingService:
         
         # 데이터 준비
         ml_data, data_info = self.prepare_data_for_modeling(target_column)
-        
+
+        print(f"[SETUP] Current data size in data_service: {len(data_service.current_data) if data_service.current_data is not None else 0}")
+        print(f"[SETUP] ML data size (after target removal): {len(ml_data)}")
+
         # 최적 설정 가져오기
         optimal_settings = self.get_optimal_settings(len(ml_data))
         actual_train_size = train_size or optimal_settings['train_size']

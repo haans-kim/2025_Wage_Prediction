@@ -27,6 +27,17 @@ class DataService:
 
         # 시작시 기본 데이터 로드 시도
         self._load_default_data()
+
+    def _clear_models_on_data_change(self):
+        """데이터 변경 시 모델 자동 초기화"""
+        try:
+            from app.services.modeling_service import modeling_service
+            result = modeling_service.clear_models()
+            print("[AUTO-CLEAR] Models automatically cleared due to data change")
+            return result
+        except Exception as e:
+            print(f"[WARNING] Could not auto-clear models: {e}")
+            return None
     
     def _load_default_data(self) -> bool:
         """기본 데이터 로드 (pickle 파일에서)"""
@@ -475,10 +486,13 @@ class DataService:
         # 증강된 데이터로 업데이트
         self.current_data = augmented_df
         self.data_info = self._analyze_dataframe(augmented_df)
-        
+
         # pickle 파일로 저장
         self._save_data_to_pickle()
-        
+
+        # 데이터 변경으로 인한 모델 자동 초기화
+        self._clear_models_on_data_change()
+
         actual_size = len(augmented_df)
         augmented_rows_count = actual_size - original_size
         

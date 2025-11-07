@@ -92,7 +92,8 @@
       "Bash(kill:*)",
       "Bash(./venv/bin/python:*)",
       "Bash(pkill:*)",
-      "Bash(for pid in 23624 14764)"
+      "Bash(for pid in 23624 14764)",
+      "Bash(for pid in 12232 14328 5152 16744 28000)"
     ],
     "deny": [],
     "ask": []
