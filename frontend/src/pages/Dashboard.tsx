@@ -28,7 +28,6 @@ import {
   LineChart,
   Sliders
 } from 'lucide-react';
-import { apiClient } from '../lib/api';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -45,13 +44,6 @@ ChartJS.register(
   Filler,
   ChartDataLabels
 );
-
-interface ScenarioTemplate {
-  id: string;
-  name: string;
-  description: string;
-  variables: Record<string, number>;
-}
 
 interface Variable {
   name: string;
@@ -100,10 +92,8 @@ interface EconomicIndicator {
 
 export const Dashboard: React.FC = () => {
   const [currentPrediction, setCurrentPrediction] = useState<PredictionResult | null>(null);
-  const [scenarioTemplates, setScenarioTemplates] = useState<ScenarioTemplate[]>([]);
   const [availableVariables, setAvailableVariables] = useState<Variable[]>([]);
   const [economicIndicators, setEconomicIndicators] = useState<Record<string, EconomicIndicator>>({});
-  const [selectedScenario, setSelectedScenario] = useState<string>('moderate');
   const [customVariables, setCustomVariables] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -143,9 +133,6 @@ export const Dashboard: React.FC = () => {
       ]);
 
       console.log('API responses:', { templatesRes, variablesRes, indicatorsRes, trendRes, featureRes });
-
-      // 시나리오 템플릿 설정
-      setScenarioTemplates(templatesRes.templates || []);
 
       // 변수 설정 (backend에서 가져온 변수 사용)
       setAvailableVariables(variablesRes.variables || []);
@@ -192,65 +179,6 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleScenarioSelect = async (templateId: string) => {
-    setSelectedScenario(templateId);
-    const template = scenarioTemplates.find(t => t.id === templateId);
-
-    if (template) {
-      setCustomVariables(template.variables);
-      setLoading('prediction');
-      setError(null);
-
-      try {
-        // Strategic predict endpoint 사용
-        const response = await fetch(`${API_BASE_URL}/api/dashboard/predict`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(template.variables)
-        });
-        const predictionRes = await response.json();
-
-        const result = predictionRes.result || predictionRes;
-        const prediction = result.prediction || {};
-
-        const formattedPrediction: PredictionResult = {
-          prediction: (prediction.total || 0) / 100,
-          base_up_rate: ((prediction.total || 0) / 100) - 0.021,  // 총인상률 - 성과인상률(2.1%)
-          performance_rate: 0.021,  // 2.1%로 고정
-          confidence_interval: [
-            ((prediction.total || 0) - 0.5) / 100,
-            ((prediction.total || 0) + 0.5) / 100
-          ] as [number, number],
-          confidence_level: result.confidence?.overall || 0.85,
-          input_variables: template.variables,
-          breakdown: {
-            base_up: {
-              rate: ((prediction.total || 0) / 100) - 0.021,  // 총인상률 - 성과인상률(2.1%)
-              percentage: (prediction.total || 0) - 2.1,
-              description: 'Base-up 인상률',
-              calculation: ''
-            },
-            performance: {
-              rate: 0.021,  // 2.1%로 고정
-              percentage: 2.1,
-              description: '성과급 인상률',
-              calculation: ''
-            },
-            total: {
-              rate: (prediction.total || 0) / 100,
-              percentage: prediction.total || 0,
-              description: '총 인상률'
-            }
-          }
-        };
-        setCurrentPrediction(formattedPrediction);
-      } catch (error) {
-        setError(error instanceof Error ? error.message : '예측 중 오류가 발생했습니다.');
-      } finally {
-        setLoading(null);
-      }
-    }
-  };
 
   const handleVariableChange = (variableName: string, value: number) => {
     const newVariables = {
@@ -337,35 +265,9 @@ export const Dashboard: React.FC = () => {
     handleCustomPrediction();
   };
 
-  const handleRunScenarioAnalysis = async () => {
-    setLoading('scenario-analysis');
-    setError(null);
 
-    try {
-      // Strategic scenarios endpoint 사용
-      const response = await fetch(`${API_BASE_URL}/api/dashboard/scenario-templates`);
-      const scenariosRes = await response.json();
-
-      const results = scenariosRes.scenarios?.map((scenario: any, index: number) => ({
-        scenario_name: scenario.name,
-        prediction: scenario.total_increase,
-        confidence_interval: [
-          scenario.total_increase - 0.005,
-          scenario.total_increase + 0.005
-        ],
-        rank: index === 0 ? 1 : (index === scenariosRes.scenarios.length - 1 ? 3 : 2)
-      })) || [];
-
-      setScenarioResults(results);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '시나리오 분석 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  const formatNumber = (num: number, decimals: number = 1) => {
-    return Number(num).toFixed(decimals);
+  const formatNumber = (num: number) => {
+    return Number(num).toFixed(1);
   };
 
   const formatPrediction = (num: number, decimals: number = 1) => {
@@ -654,7 +556,7 @@ export const Dashboard: React.FC = () => {
       value: number;
     }
 
-    const featureContributions: FeatureContribution[] = allFeatures.map((item: any, index: number) => {
+    const featureContributions: FeatureContribution[] = allFeatures.map((item: any) => {
       // importance 값을 그대로 사용 (모두 양수)
       const normalizedImportance = item.importance / allFeatures[0].importance;
 
@@ -731,7 +633,7 @@ export const Dashboard: React.FC = () => {
         },
         anchor: 'center' as const,
         align: 'center' as const,
-        formatter: (value: any, context: any) => {
+        formatter: (_value: any, context: any) => {
           const dataIndex = context.dataIndex;
           const featureData = featureImportance?.feature_importance[dataIndex];
           if (featureData) {
@@ -927,7 +829,7 @@ export const Dashboard: React.FC = () => {
                   <div className="flex justify-between items-center">
                     <label className="text-sm font-medium">{variable.display_name}</label>
                     <span className="text-sm text-muted-foreground">
-                      {formatNumber(customVariables[variable.name] || variable.current_value, 1)}{variable.unit}
+                      {formatNumber(customVariables[variable.name] || variable.current_value)}{variable.unit}
                     </span>
                   </div>
                   <input
@@ -938,6 +840,7 @@ export const Dashboard: React.FC = () => {
                     value={customVariables[variable.name] || variable.current_value}
                     onChange={(e) => handleVariableChange(variable.name, parseFloat(e.target.value))}
                     className="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer"
+                    aria-label={variable.display_name}
                   />
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>{variable.min_value}{variable.unit}</span>

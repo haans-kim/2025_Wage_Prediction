@@ -84,7 +84,14 @@
       "Bash(.venvScriptspython.exe run.py)",
       "Bash(cmd /c \"for /f \"\"tokens=5\"\" %a in (''netstat -ano ^| findstr :3000'') do taskkill /F /PID %a\")",
       "Bash(cmd /c \"taskkill /F /IM node.exe\")",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(/dev/null)",
+      "Bash(/tmp/old_dashboard_service.py)",
+      "Bash(/tmp/replacement.txt)",
+      "Bash(/tmp/ca966d2_modeling.py)",
+      "Bash(kill:*)",
+      "Bash(./venv/bin/python:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []

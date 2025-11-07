@@ -199,15 +199,31 @@ class DashboardService:
 
             for col in feature_columns:
                 if col in variables:
+                    # 사용자가 조정한 변수 사용 (변수명이 실제 컬럼명과 일치하는 경우)
                     input_data[col] = variables[col]
                     print(f"  [USER] Using user input for {col}: {variables[col]}")
                 else:
+                    # 최신 데이터값 사용
                     value = pd.to_numeric(latest_row[col], errors='coerce')
                     if pd.notna(value):
                         input_data[col] = value
                     else:
                         input_data[col] = 0.0
-            
+
+            # 학습 시와 동일한 스케일링 적용 (백만 단위로 변환)
+            large_value_columns = [
+                'labor_cost_per_employee_sbl',
+                'revenue_per_employee_sbl',
+                'op_profit_per_employee_sbl',
+                'hcva_sbl'
+            ]
+            for col in large_value_columns:
+                if col in input_data:
+                    # 백만 단위로 스케일링
+                    original_val = input_data[col]
+                    input_data[col] = original_val / 1e6
+                    print(f"  [SCALE] {col}: {original_val} → {input_data[col]:.2f}M")
+
             print(f"[DATA] Model input prepared with {len(input_data)} features")
             
             # 중요한 변수들의 값 로깅
